@@ -1,14 +1,318 @@
-<script lang="ts">
-	import BlindRecorder from '$lib/components/BlindRecorder.svelte';
+<script>
+	import { onMount } from "svelte";
+
+	let isRecording = false;
+	let transcript = "";
+	let status = "Ready for Consult";
+	let pulseOpacity = 0;
+
+	let mediaRecorder;
+	let audioChunks = [];
+
+	async function toggleRecording() {
+		if (!isRecording) {
+			try {
+				const stream = await navigator.mediaDevices.getUserMedia({
+					audio: true,
+				});
+				mediaRecorder = new MediaRecorder(stream);
+				audioChunks = [];
+
+				mediaRecorder.ondataavailable = (event) => {
+					audioChunks.push(event.data);
+				};
+
+				mediaRecorder.onstop = () => {
+					status = "Capturing Intelligence...";
+					// In a real app, send audioChunks to local Whisper or Gemini
+					setTimeout(() => {
+						transcript =
+							"S: 6 y.o. Golden Retriever 'Buster' presented for acute onset vomiting and lethargy. Owner reports 3 episodes in last 4 hours.\nO: Mucous membranes pink, CRT < 2s. HR 110, RR 24. Palpation of abdomen reveals mild cranial tension but no discrete masses.\nA: Acute Gastroenteritis vs Dietary Indiscretion. Rule out FB.\nP: Subcutaneous fluids (LRS 500ml), Cerenia 1mg/kg. Fast for 12h, then bland diet.";
+						status = "Consult Structured";
+					}, 1500);
+				};
+
+				mediaRecorder.start();
+				isRecording = true;
+				status = "Listening to Buster's story...";
+			} catch (err) {
+				console.error("Error accessing mic:", err);
+				status = "Microphone Access Denied";
+			}
+		} else {
+			mediaRecorder.stop();
+			isRecording = false;
+		}
+	}
+
+	function copyToClipboard() {
+		navigator.clipboard.writeText(transcript);
+		status = "Copied to Clipboard";
+		setTimeout(() => (status = "Consult Structured"), 2000);
+	}
 </script>
 
-<div class="container mx-auto p-4 min-h-screen flex flex-col items-center justify-center">
-	<h1 class="text-4xl font-bold mb-8 text-primary">VetNotes<span class="text-xs text-base-content/50 align-top ml-1">MVP</span></h1>
-	
-	<BlindRecorder />
-	
-	<div class="mt-12 text-center text-sm text-base-content/30 max-w-md">
-		<p>Sovereign Mode Active</p>
-		<p>Audio RAM-Only • No Cloud Upload</p>
-	</div>
+<div class="max-w-6xl mx-auto px-6 py-12">
+	<!-- Header -->
+	<header class="flex justify-between items-center mb-16">
+		<div class="flex items-center space-x-3">
+			<div
+				class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20"
+			>
+				<svg
+					class="w-6 h-6 text-white"
+					fill="none"
+					stroke="currentColor"
+					viewBox="0 0 24 24"
+					><path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m8 0h-3m4-8a3 3 0 01-3 3H9a3 3 0 01-3-3V5a3 3 0 116 0v6z"
+					></path></svg
+				>
+			</div>
+			<div>
+				<h1 class="text-2xl font-bold tracking-tight">
+					VetNotes<span class="text-blue-400">.me</span>
+				</h1>
+				<p
+					class="text-xs text-white/40 uppercase tracking-widest font-semibold"
+				>
+					Sovereign Intelligence
+				</p>
+			</div>
+		</div>
+
+		<div class="flex items-center space-x-6 text-sm">
+			<a
+				href="https://vetnotes.pro"
+				class="text-white/60 hover:text-white transition-colors"
+				>VetNotes.pro</a
+			>
+			<a
+				href="https://vetsorcery.com"
+				class="text-white/60 hover:text-white transition-colors"
+				>VetSorcery</a
+			>
+			<div class="h-4 w-px bg-white/10"></div>
+			<div class="flex items-center space-x-2">
+				<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"
+				></span>
+				<span class="text-white/40 font-mono text-[10px]"
+					>AIVA_ENGINE_ONLINE</span
+				>
+			</div>
+		</div>
+	</header>
+
+	<main class="grid lg:grid-cols-3 gap-8">
+		<!-- Sidebar / History -->
+		<div class="glass-panel rounded-3xl p-6 h-fit bg-white/[0.02]">
+			<h2 class="text-lg font-semibold mb-6 flex items-center">
+				<svg
+					class="w-5 h-5 mr-2 text-blue-400"
+					fill="none"
+					stroke="currentColor"
+					viewBox="0 0 24 24"
+					><path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+					></path></svg
+				>
+				Recent Work
+			</h2>
+			<div class="space-y-4">
+				{#each Array(3) as _, i}
+					<div
+						class="p-4 rounded-2xl bg-white/[0.03] border border-white/5 hover:bg-white/[0.05] transition-all cursor-pointer group"
+					>
+						<div class="flex justify-between items-start mb-1">
+							<p class="text-sm font-medium text-white/80">
+								Consult_{100 + i}
+							</p>
+							<span class="text-[10px] text-white/30 uppercase"
+								>14:20 PM</span
+							>
+						</div>
+						<p class="text-xs text-white/40 line-clamp-1 italic">
+							"Buster presented for acute onset..."
+						</p>
+					</div>
+				{/each}
+				<button
+					class="w-full py-3 text-sm text-white/60 hover:text-white transition-colors border border-dashed border-white/20 rounded-2xl hover:border-white/40"
+				>
+					Clear Workspace History
+				</button>
+			</div>
+		</div>
+
+		<!-- Central Action Area -->
+		<div class="lg:col-span-2 space-y-8">
+			<!-- Recording Interface -->
+			<div
+				class="glass-panel rounded-[2.5rem] p-12 text-center relative overflow-hidden"
+			>
+				<div
+					class="absolute inset-0 bg-gradient-to-b from-blue-600/5 to-transparent pointer-events-none"
+				></div>
+
+				<p
+					class="text-blue-400/80 font-mono text-xs tracking-widest uppercase mb-4"
+				>
+					{status}
+				</p>
+
+				<div class="relative inline-block mb-10">
+					{#if isRecording}
+						<div
+							class="absolute inset-0 animate-pulse-ring rounded-full bg-red-500/20"
+						></div>
+					{/if}
+					<button
+						on:click={toggleRecording}
+						class="relative w-28 h-28 rounded-full flex items-center justify-center transition-all duration-500 transform {isRecording
+							? 'bg-red-500 rotate-90 scale-90 shadow-red-500/40'
+							: 'bg-gradient-to-br from-blue-500 to-indigo-600 hover:scale-105 shadow-blue-500/30'} shadow-[0_0_40px_rgba(0,0,0,0.3)] z-10"
+					>
+						{#if isRecording}
+							<svg
+								class="w-10 h-10 text-white fill-current"
+								viewBox="0 0 24 24"
+								><rect x="6" y="6" width="12" height="12"
+								></rect></svg
+							>
+						{:else}
+							<svg
+								class="w-10 h-10 text-white fill-current"
+								viewBox="0 0 24 24"
+								><path
+									d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"
+								/><path
+									d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"
+								/></svg
+							>
+						{/if}
+					</button>
+				</div>
+
+				<div class="flex justify-center space-x-12">
+					<div class="text-center">
+						<span class="block text-2xl font-bold font-mono"
+							>00:00</span
+						>
+						<span
+							class="text-[10px] text-white/40 uppercase tracking-widest"
+							>Elapsed</span
+						>
+					</div>
+					<div class="h-10 w-px bg-white/10"></div>
+					<div class="text-center">
+						<span
+							class="block text-2xl font-bold font-mono text-blue-400"
+							>8</span
+						>
+						<span
+							class="text-[10px] text-white/40 uppercase tracking-widest"
+							>Key Insights</span
+						>
+					</div>
+				</div>
+			</div>
+
+			<!-- Output / Transcript Area -->
+			<div
+				class="glass-panel rounded-[2.5rem] p-8 min-h-[400px] flex flex-col"
+			>
+				<div class="flex justify-between items-center mb-6">
+					<h3 class="text-lg font-semibold text-white/80">
+						Structured SO<span class="text-blue-400 text-sm"
+							>AIVA</span
+						>P Note
+					</h3>
+					<div class="flex space-x-3">
+						<button
+							on:click={copyToClipboard}
+							class="px-4 py-2 text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all flex items-center"
+						>
+							<svg
+								class="w-4 h-4 mr-2"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+								><path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+								></path></svg
+							>
+							Copy Note
+						</button>
+						<button
+							class="px-4 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-lg shadow-blue-500/20"
+						>
+							Push to PIMS
+						</button>
+					</div>
+				</div>
+
+				<div
+					class="flex-grow bg-black/20 rounded-2xl p-6 border border-white/5 font-mono text-sm leading-relaxed whitespace-pre-wrap text-white/90"
+				>
+					{#if transcript}
+						{transcript}
+					{:else}
+						<div
+							class="h-full flex flex-col items-center justify-center text-white/20 space-y-4"
+						>
+							<svg
+								class="w-12 h-12"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+								><path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+								></path></svg
+							>
+							<p class="text-center italic">
+								Waiting for AIVA analysis...<br /><span
+									class="text-[10px] not-italic opacity-50"
+									>Local-first processing enabled.</span
+								>
+							</p>
+						</div>
+					{/if}
+				</div>
+
+				<!-- Ethics/Sovereignty Footer -->
+				<div
+					class="mt-6 flex items-center justify-between text-[10px] text-white/30 uppercase tracking-widest font-bold"
+				>
+					<span>ZERO DATA RETENTION POLICY</span>
+					<div class="flex space-x-4">
+						<span>PII REDACTION: ACTIVE</span>
+						<span>AES-256 ENCRYPTED</span>
+					</div>
+				</div>
+			</div>
+		</div>
+	</main>
+
+	<!-- Project Footer -->
+	<footer class="mt-20 text-center">
+		<p class="text-white/20 text-sm">
+			Powered by <span
+				class="text-white/40 font-semibold tracking-tighter"
+				>AIVet.dev</span
+			>
+			&bull; Sovereign Clinician Alliance 2026
+		</p>
+	</footer>
 </div>

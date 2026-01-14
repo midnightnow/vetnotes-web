@@ -1,3 +1,43 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+    :root {
+        --glass-bg: rgba(255, 255, 255, 0.03);
+        --glass-border: rgba(255, 255, 255, 0.1);
+    }
+
+    body {
+        @apply min-h-screen font-sans;
+        background-color: #0d1117;
+        background-image:
+            radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%),
+            radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 0.1) 0, transparent 50%),
+            radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 0.1) 0, transparent 50%);
+        color: white;
+    }
+}
+
+@layer components {
+    .glass-panel {
+        @apply backdrop-blur-2xl border border-white/10 shadow-2xl;
+        background: rgba(255, 255, 255, 0.03);
+    }
+}
+
+@keyframes pulse-ring {
+    0% {
+        transform: scale(0.8);
+        opacity: 0.5;
+    }
+
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+.animate-pulse-ring {
+    animation: pulse-ring 2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+}

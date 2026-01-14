@@ -1,8 +1,11 @@
 import { pipeline, env } from '@xenova/transformers';
 
-// Skip local model checks for now (download from HuggingFace Hub)
+// Configure environment for browser usage
+// Disable local models to force CDN fetch which avoids FS errors in browser
 env.allowLocalModels = false;
 env.useBrowserCache = true;
+// Ensure no auth token is accidentally sent for public models
+// env.useAuthToken = false; // Not a standard property but good to keep in mind if using custom fetch
 
 let transcriber = null;
 
@@ -11,8 +14,8 @@ self.addEventListener('message', async (event) => {
 
     if (message.type === 'load') {
         try {
-            // Use quantized distil-whisper for speed in browser
-            transcriber = await pipeline('automatic-speech-recognition', 'Xenova/distil-whisper-small.en');
+            // Using whisper-tiny.en for maximum MVP reliability and speed
+            transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
             self.postMessage({ status: 'ready' });
         } catch (error) {
             self.postMessage({ status: 'error', error: error.message });
