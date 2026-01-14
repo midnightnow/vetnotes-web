@@ -1,28 +1,88 @@
-/**
- * PII Redaction Utility for VetNotes
- * Designed to scrub patient/client identifiers before text leaves the local "Local Loop".
- */
+// PII Redaction Utility for Client-Side Privacy
+// Runs before any data leaves the browser
 
-export function redactPII(text: string): string {
+const REDACTION_PATTERNS = [
+    // Phone numbers (various formats)
+    { pattern: /\b(?:\+?61|0)[\s.-]?(?:4[\d]{2}|[2-9])[\s.-]?\d{3}[\s.-]?\d{3,4}\b/g, replacement: '[PHONE]' },
+    { pattern: /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, replacement: '[PHONE]' },
+
+    // Email addresses
+    { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, replacement: '[EMAIL]' },
+
+    // Microchip numbers (15-digit)
+    { pattern: /\b9\d{14}\b/g, replacement: '[MICROCHIP]' },
+
+    // Credit card numbers
+    { pattern: /\b(?:\d{4}[\s-]?){3}\d{4}\b/g, replacement: '[CARD]' },
+
+    // Australian postcodes
+    { pattern: /\b[0-9]{4}\b(?=\s*(?:NSW|VIC|QLD|WA|SA|TAS|NT|ACT)?)/gi, replacement: '[POSTCODE]' },
+
+    // Street addresses
+    { pattern: /\b\d+\s+[A-Za-z]+\s+(?:St(?:reet)?|Rd|Road|Ave(?:nue)?|Dr(?:ive)?|Ct|Court|Cres(?:cent)?|Pl(?:ace)?|Lane|Way)\b/gi, replacement: '[ADDRESS]' },
+
+    // Medicare/Health numbers
+    { pattern: /\b\d{4}\s?\d{5}\s?\d{1}\b/g, replacement: '[HEALTH_ID]' },
+
+    // Date of birth patterns
+    { pattern: /\b(?:DOB|born|birthday)[:\s]+\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b/gi, replacement: '[DOB]' },
+];
+
+// Common name patterns (simple heuristic)
+const NAME_INDICATORS = [
+    /\b(?:Mrs?\.?|Ms\.?|Dr\.?|Miss)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/g,
+    /\b(?:owner|client)\s+(?:is\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/gi,
+];
+
+export function redactPII(text: string, options: { aggressive?: boolean } = {}): string {
     let redacted = text;
 
-    // 1. Phone Numbers (Various Formats)
-    redacted = redacted.replace(/(\+?\d{1,2}\s?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g, '[PHONE]');
+    // Apply pattern-based redaction
+    for (const { pattern, replacement } of REDACTION_PATTERNS) {
+        redacted = redacted.replace(pattern, replacement);
+    }
 
-    // 2. Email Addresses
-    redacted = redacted.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[EMAIL]');
-
-    // 3. Dates of Birth (Optional - common in transcripts)
-    // Match "Born on X", "DOB: X", etc.
-    redacted = redacted.replace(/\b(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4})\b/g, '[DATE]');
-
-    // 4. Heuristic for Surname patterns (e.g., "Mr. Smith", "Mrs. Jackson")
-    // We look for common titles followed by a capitalized word
-    redacted = redacted.replace(/\b(Mr\.|Mrs\.|Ms\.|Dr\.)\s+([A-Z][a-z]+)\b/g, '$1 [SURNAME]');
-
-    // 5. Patient Name patterns (e.g., "The dog, Bella", "Cat's name is Luna")
-    // This is harder but we can catch common "Name is X" structures
-    redacted = redacted.replace(/\b(name is|called|named)\s+([A-Z][a-z]+)\b/gi, '$1 [NAME]');
+    // Apply name redaction if aggressive mode
+    if (options.aggressive) {
+        for (const pattern of NAME_INDICATORS) {
+            redacted = redacted.replace(pattern, (match, name) => {
+                return match.replace(name, '[CLIENT_NAME]');
+            });
+        }
+    }
 
     return redacted;
+}
+
+export function detectPIITypes(text: string): string[] {
+    const detected: string[] = [];
+
+    for (const { pattern, replacement } of REDACTION_PATTERNS) {
+        if (pattern.test(text)) {
+            detected.push(replacement.replace(/[\[\]]/g, ''));
+        }
+        // Reset lastIndex for global patterns
+        pattern.lastIndex = 0;
+    }
+
+    return [...new Set(detected)];
+}
+
+export function generateRedactionReport(original: string, redacted: string): {
+    originalLength: number;
+    redactedLength: number;
+    redactionsCount: number;
+    piiTypesFound: string[];
+} {
+    const piiTypes = detectPIITypes(original);
+
+    // Count redactions by looking for [PLACEHOLDER] patterns
+    const redactionMatches = redacted.match(/\[[A-Z_]+\]/g) || [];
+
+    return {
+        originalLength: original.length,
+        redactedLength: redacted.length,
+        redactionsCount: redactionMatches.length,
+        piiTypesFound: piiTypes
+    };
 }

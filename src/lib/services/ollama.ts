@@ -13,7 +13,7 @@ Transcript follows:
 ---
 `;
 
-export async function structureNoteLocal(transcript: string, modelName: string = "llama3") {
+export async function structureNoteLocal(transcript: string, modelName: string = "llama3", customPrompt: string = "") {
     try {
         const response = await fetch("http://localhost:11434/api/generate", {
             method: "POST",
@@ -22,7 +22,7 @@ export async function structureNoteLocal(transcript: string, modelName: string =
             },
             body: JSON.stringify({
                 model: modelName,
-                prompt: PROJECT_PROMPT + transcript,
+                prompt: (customPrompt || PROJECT_PROMPT) + "\n\nTranscript:\n" + transcript,
                 stream: false,
             }),
         });

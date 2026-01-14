@@ -15,12 +15,12 @@ Transcript follows:
 ---
 `;
 
-export async function structureNote(transcript: string, apiKey: string) {
+export async function structureNote(transcript: string, apiKey: string, customPrompt: string = "") {
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-        const prompt = PROJECT_PROMPT + transcript;
+        const prompt = (customPrompt || PROJECT_PROMPT) + "\n\nTranscript:\n" + transcript;
         const result = await model.generateContent(prompt);
         const response = await result.response;
         return response.text();

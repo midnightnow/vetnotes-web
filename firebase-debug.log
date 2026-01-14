@@ -1,0 +1,16 @@
+[debug] [2026-01-14T11:44:32.914Z] ----------------------------------------------------------------------
+[debug] [2026-01-14T11:44:32.915Z] Command:       /opt/homebrew/Cellar/node/25.2.1/bin/node /opt/homebrew/bin/firebase deploy --only hosting --non-interactive
+[debug] [2026-01-14T11:44:32.915Z] CLI Version:   14.15.2
+[debug] [2026-01-14T11:44:32.915Z] Platform:      darwin
+[debug] [2026-01-14T11:44:32.915Z] Node Version:  v25.2.1
+[debug] [2026-01-14T11:44:32.915Z] Time:          Wed Jan 14 2026 21:44:32 GMT+1000 (Australian Eastern Standard Time)
+[debug] [2026-01-14T11:44:32.915Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-01-14T11:44:32.989Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-01-14T11:44:32.990Z] > authorizing via signed-in user (dallasm@gmail.com)
+[debug] [2026-01-14T11:44:32.990Z] [iam] checking project vetnotes-sovereign for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-01-14T11:44:32.990Z] Checked if tokens are valid: true, expires at: 1768394588823
+[debug] [2026-01-14T11:44:32.990Z] Checked if tokens are valid: true, expires at: 1768394588823
+[debug] [2026-01-14T11:44:32.991Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/vetnotes-sovereign:testIamPermissions [none]
+[debug] [2026-01-14T11:44:32.991Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/vetnotes-sovereign:testIamPermissions x-goog-quota-user=projects/vetnotes-sovereign
+[debug] [2026-01-14T11:44:32.991Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/vetnotes-sovereign:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}

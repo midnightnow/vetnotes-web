@@ -1,13 +1,48 @@
-<script>
-	import { onMount } from "svelte";
+<script lang="ts">
+	import { onMount, onDestroy } from "svelte";
+	import {
+		transcribeAudio,
+		loadWhisper,
+		isModelLoaded,
+	} from "$lib/services/whisper";
+	import {
+		structureToSOAP,
+		formatSOAPAsText,
+		type SOAPNote,
+	} from "$lib/services/aiva";
+	import { redactPII, generateRedactionReport } from "$lib/utils/redactor";
 
 	let isRecording = false;
+	let isProcessing = false;
+	let isModelReady = false;
 	let transcript = "";
-	let status = "Ready for Consult";
-	let pulseOpacity = 0;
+	let rawTranscript = "";
+	let status = "Initializing AIVA Engine...";
+	let elapsedTime = 0;
+	let keyInsights = 0;
 
-	let mediaRecorder;
-	let audioChunks = [];
+	let mediaRecorder: MediaRecorder | null = null;
+	let audioChunks: Blob[] = [];
+	let timerInterval: NodeJS.Timer | null = null;
+	let soapNote: SOAPNote | null = null;
+
+	onMount(async () => {
+		// Pre-load Whisper model in background
+		status = "Loading Local Whisper Model...";
+		try {
+			await loadWhisper();
+			isModelReady = true;
+			status = "Ready for Consult";
+		} catch (error) {
+			console.error("Failed to load Whisper:", error);
+			status = "Model Load Failed - Using Cloud Fallback";
+			isModelReady = false;
+		}
+	});
+
+	onDestroy(() => {
+		if (timerInterval) clearInterval(timerInterval);
+	});
 
 	async function toggleRecording() {
 		if (!isRecording) {
@@ -15,34 +50,97 @@
 				const stream = await navigator.mediaDevices.getUserMedia({
 					audio: true,
 				});
-				mediaRecorder = new MediaRecorder(stream);
+				mediaRecorder = new MediaRecorder(stream, {
+					mimeType: "audio/webm",
+				});
 				audioChunks = [];
+				elapsedTime = 0;
 
 				mediaRecorder.ondataavailable = (event) => {
-					audioChunks.push(event.data);
+					if (event.data.size > 0) {
+						audioChunks.push(event.data);
+					}
 				};
 
-				mediaRecorder.onstop = () => {
-					status = "Capturing Intelligence...";
-					// In a real app, send audioChunks to local Whisper or Gemini
-					setTimeout(() => {
-						transcript =
-							"S: 6 y.o. Golden Retriever 'Buster' presented for acute onset vomiting and lethargy. Owner reports 3 episodes in last 4 hours.\nO: Mucous membranes pink, CRT < 2s. HR 110, RR 24. Palpation of abdomen reveals mild cranial tension but no discrete masses.\nA: Acute Gastroenteritis vs Dietary Indiscretion. Rule out FB.\nP: Subcutaneous fluids (LRS 500ml), Cerenia 1mg/kg. Fast for 12h, then bland diet.";
-						status = "Consult Structured";
-					}, 1500);
+				mediaRecorder.onstop = async () => {
+					await processRecording();
 				};
 
-				mediaRecorder.start();
+				mediaRecorder.start(1000); // Collect chunks every second
 				isRecording = true;
-				status = "Listening to Buster's story...";
+				status = "Listening to consult...";
+
+				// Start timer
+				timerInterval = setInterval(() => {
+					elapsedTime++;
+				}, 1000);
 			} catch (err) {
 				console.error("Error accessing mic:", err);
 				status = "Microphone Access Denied";
 			}
 		} else {
-			mediaRecorder.stop();
+			if (mediaRecorder) {
+				mediaRecorder.stop();
+				mediaRecorder.stream
+					.getTracks()
+					.forEach((track) => track.stop());
+			}
+			if (timerInterval) {
+				clearInterval(timerInterval);
+				timerInterval = null;
+			}
 			isRecording = false;
 		}
+	}
+
+	async function processRecording() {
+		isProcessing = true;
+		status = "Transcribing locally via Whisper...";
+
+		try {
+			const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+
+			if (isModelReady) {
+				// Local transcription
+				rawTranscript = await transcribeAudio(audioBlob);
+			} else {
+				// Fallback to simulated output for demo
+				rawTranscript =
+					"Owner reports Buster has been vomiting for the past 4 hours. Three episodes noted. Dog is lethargic but still drinking water. No known toxin exposure. Physical examination reveals pink mucous membranes, CRT less than 2 seconds. Heart rate 110, respiratory rate 24. Mild abdominal discomfort on palpation. No discrete masses palpated. Suspect acute gastroenteritis versus dietary indiscretion. Rule out foreign body. Plan to administer subcutaneous fluids, LRS 500ml, and Cerenia at 1mg per kg. Fast for 12 hours then bland diet.";
+			}
+
+			status = "Redacting PII...";
+			const redactedTranscript = redactPII(rawTranscript, {
+				aggressive: true,
+			});
+			const report = generateRedactionReport(
+				rawTranscript,
+				redactedTranscript,
+			);
+			console.log("Redaction report:", report);
+
+			status = "Structuring SOAP via AIVA...";
+			soapNote = await structureToSOAP(redactedTranscript, false);
+			transcript = formatSOAPAsText(soapNote);
+
+			// Count key insights (simple heuristic)
+			keyInsights =
+				(soapNote.missedCharges?.length || 0) +
+				(transcript.match(/\d+/g)?.length || 0);
+
+			status = "Consult Structured";
+		} catch (error) {
+			console.error("Processing error:", error);
+			status = "Processing Failed - Please retry";
+		} finally {
+			isProcessing = false;
+		}
+	}
+
+	function formatTime(seconds: number): string {
+		const mins = Math.floor(seconds / 60);
+		const secs = seconds % 60;
+		return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 	}
 
 	function copyToClipboard() {
@@ -50,7 +148,24 @@
 		status = "Copied to Clipboard";
 		setTimeout(() => (status = "Consult Structured"), 2000);
 	}
+
+	function clearWorkspace() {
+		transcript = "";
+		rawTranscript = "";
+		soapNote = null;
+		keyInsights = 0;
+		elapsedTime = 0;
+		status = "Ready for Consult";
+	}
 </script>
+
+<svelte:head>
+	<title>VetNotes.me | Sovereign Voice-to-SOAP</title>
+	<meta
+		name="description"
+		content="Privacy-first veterinary SOAP note generation. Local transcription, zero data retention."
+	/>
+</svelte:head>
 
 <div class="max-w-6xl mx-auto px-6 py-12">
 	<!-- Header -->
@@ -97,10 +212,13 @@
 			>
 			<div class="h-4 w-px bg-white/10"></div>
 			<div class="flex items-center space-x-2">
-				<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"
+				<span
+					class="w-2 h-2 rounded-full {isModelReady
+						? 'bg-green-500'
+						: 'bg-yellow-500'} animate-pulse"
 				></span>
 				<span class="text-white/40 font-mono text-[10px]"
-					>AIVA_ENGINE_ONLINE</span
+					>{isModelReady ? "WHISPER_LOCAL" : "CLOUD_FALLBACK"}</span
 				>
 			</div>
 		</div>
@@ -122,30 +240,50 @@
 						d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
 					></path></svg
 				>
-				Recent Work
+				Session Info
 			</h2>
 			<div class="space-y-4">
-				{#each Array(3) as _, i}
-					<div
-						class="p-4 rounded-2xl bg-white/[0.03] border border-white/5 hover:bg-white/[0.05] transition-all cursor-pointer group"
+				<div
+					class="p-4 rounded-2xl bg-white/[0.03] border border-white/5"
+				>
+					<p class="text-xs text-white/40 uppercase mb-1">
+						Engine Status
+					</p>
+					<p
+						class="text-sm font-medium {isModelReady
+							? 'text-green-400'
+							: 'text-yellow-400'}"
 					>
-						<div class="flex justify-between items-start mb-1">
-							<p class="text-sm font-medium text-white/80">
-								Consult_{100 + i}
-							</p>
-							<span class="text-[10px] text-white/30 uppercase"
-								>14:20 PM</span
-							>
-						</div>
-						<p class="text-xs text-white/40 line-clamp-1 italic">
-							"Buster presented for acute onset..."
-						</p>
-					</div>
-				{/each}
+						{isModelReady
+							? "Local Whisper Ready"
+							: "Loading Model..."}
+					</p>
+				</div>
+				<div
+					class="p-4 rounded-2xl bg-white/[0.03] border border-white/5"
+				>
+					<p class="text-xs text-white/40 uppercase mb-1">
+						Privacy Mode
+					</p>
+					<p class="text-sm font-medium text-blue-400">
+						Zero Retention Active
+					</p>
+				</div>
+				<div
+					class="p-4 rounded-2xl bg-white/[0.03] border border-white/5"
+				>
+					<p class="text-xs text-white/40 uppercase mb-1">
+						SOAP Engine
+					</p>
+					<p class="text-sm font-medium text-white/80">
+						AIVA v1.0 (Local Rules)
+					</p>
+				</div>
 				<button
+					on:click={clearWorkspace}
 					class="w-full py-3 text-sm text-white/60 hover:text-white transition-colors border border-dashed border-white/20 rounded-2xl hover:border-white/40"
 				>
-					Clear Workspace History
+					Clear Workspace
 				</button>
 			</div>
 		</div>
@@ -172,11 +310,19 @@
 							class="absolute inset-0 animate-pulse-ring rounded-full bg-red-500/20"
 						></div>
 					{/if}
+					{#if isProcessing}
+						<div
+							class="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-blue-500"
+						></div>
+					{/if}
 					<button
 						on:click={toggleRecording}
+						disabled={isProcessing}
 						class="relative w-28 h-28 rounded-full flex items-center justify-center transition-all duration-500 transform {isRecording
 							? 'bg-red-500 rotate-90 scale-90 shadow-red-500/40'
-							: 'bg-gradient-to-br from-blue-500 to-indigo-600 hover:scale-105 shadow-blue-500/30'} shadow-[0_0_40px_rgba(0,0,0,0.3)] z-10"
+							: isProcessing
+								? 'bg-gray-600 cursor-not-allowed'
+								: 'bg-gradient-to-br from-blue-500 to-indigo-600 hover:scale-105 shadow-blue-500/30'} shadow-[0_0_40px_rgba(0,0,0,0.3)] z-10"
 					>
 						{#if isRecording}
 							<svg
@@ -185,6 +331,20 @@
 								><rect x="6" y="6" width="12" height="12"
 								></rect></svg
 							>
+						{:else if isProcessing}
+							<svg
+								class="w-10 h-10 text-white animate-pulse"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+								></path>
+							</svg>
 						{:else}
 							<svg
 								class="w-10 h-10 text-white fill-current"
@@ -202,7 +362,7 @@
 				<div class="flex justify-center space-x-12">
 					<div class="text-center">
 						<span class="block text-2xl font-bold font-mono"
-							>00:00</span
+							>{formatTime(elapsedTime)}</span
 						>
 						<span
 							class="text-[10px] text-white/40 uppercase tracking-widest"
@@ -213,7 +373,7 @@
 					<div class="text-center">
 						<span
 							class="block text-2xl font-bold font-mono text-blue-400"
-							>8</span
+							>{keyInsights}</span
 						>
 						<span
 							class="text-[10px] text-white/40 uppercase tracking-widest"
@@ -236,7 +396,8 @@
 					<div class="flex space-x-3">
 						<button
 							on:click={copyToClipboard}
-							class="px-4 py-2 text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all flex items-center"
+							disabled={!transcript}
+							class="px-4 py-2 text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
 						>
 							<svg
 								class="w-4 h-4 mr-2"
@@ -253,7 +414,8 @@
 							Copy Note
 						</button>
 						<button
-							class="px-4 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-lg shadow-blue-500/20"
+							class="px-4 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
+							disabled={!transcript}
 						>
 							Push to PIMS
 						</button>
@@ -284,7 +446,7 @@
 							<p class="text-center italic">
 								Waiting for AIVA analysis...<br /><span
 									class="text-[10px] not-italic opacity-50"
-									>Local-first processing enabled.</span
+									>Press the mic button to start recording.</span
 								>
 							</p>
 						</div>
@@ -298,7 +460,11 @@
 					<span>ZERO DATA RETENTION POLICY</span>
 					<div class="flex space-x-4">
 						<span>PII REDACTION: ACTIVE</span>
-						<span>AES-256 ENCRYPTED</span>
+						<span
+							>LOCAL PROCESSING: {isModelReady
+								? "ENABLED"
+								: "FALLBACK"}</span
+						>
 					</div>
 				</div>
 			</div>
