@@ -1,27 +1,27 @@
 <script lang="ts">
 	import { onMount, onDestroy } from "svelte";
 	import {
-		transcribeAudio,
-		loadWhisper,
-		isModelLoaded,
-	} from "$lib/services/whisper";
-	import {
 		structureToSOAP,
 		formatSOAPAsText,
 		pushToPIMS,
 		type SOAPNote,
 	} from "$lib/services/aiva";
+	import { structureViaGemini } from "$lib/services/gemini";
 	import { redactPII, generateRedactionReport } from "$lib/utils/redactor";
 
 	let isRecording = false;
 	let isProcessing = false;
-	let isModelReady = false;
 	let transcript = "";
 	let rawTranscript = "";
-	let status = "Initializing AIVA Engine...";
+	let status = "Ready for Consult";
 	let elapsedTime = 0;
 	let keyInsights = 0;
 	let isPushing = false;
+	let recognition: any = null;
+	let interimTranscript = "";
+	let isPro = false;
+	let showSettings = false;
+	let aivaApiKey = "";
 
 	let mediaRecorder: MediaRecorder | null = null;
 	let audioChunks: Blob[] = [];
@@ -29,16 +29,57 @@
 	let soapNote: SOAPNote | null = null;
 
 	onMount(async () => {
-		// Pre-load Whisper model in background
-		status = "Loading Local Whisper Model...";
-		try {
-			await loadWhisper();
-			isModelReady = true;
+		// Detect if running on .pro domain
+		if (typeof window !== "undefined") {
+			isPro = window.location.hostname.includes("vetnotes.pro");
+			const storedKey = localStorage.getItem("aiva_api_key");
+			if (storedKey) aivaApiKey = storedKey;
+		}
+
+		// Initialize Web Speech API
+		if (
+			"webkitSpeechRecognition" in window ||
+			"SpeechRecognition" in window
+		) {
+			const SpeechRecognition =
+				(window as any).SpeechRecognition ||
+				(window as any).webkitSpeechRecognition;
+			recognition = new SpeechRecognition();
+			recognition.continuous = true;
+			recognition.interimResults = true;
+			recognition.lang = "en-US";
+
+			recognition.onresult = (event: any) => {
+				let interim = "";
+				let final = "";
+
+				for (let i = event.resultIndex; i < event.results.length; i++) {
+					const transcript = event.results[i][0].transcript;
+					if (event.results[i].isFinal) {
+						final += transcript + " ";
+					} else {
+						interim += transcript;
+					}
+				}
+
+				if (final) {
+					rawTranscript += final;
+				}
+				interimTranscript = interim;
+			};
+
+			recognition.onerror = (event: any) => {
+				console.error("Speech recognition error:", event.error);
+				if (event.error === "no-speech") {
+					status = "No speech detected - please speak clearly";
+				} else if (event.error === "not-allowed") {
+					status = "Microphone access denied";
+				}
+			};
+
 			status = "Ready for Consult";
-		} catch (error) {
-			console.error("Failed to load Whisper:", error);
-			status = "Model Load Failed - Using Cloud Fallback";
-			isModelReady = false;
+		} else {
+			status = "Speech recognition not supported in this browser";
 		}
 	});
 
@@ -52,6 +93,15 @@
 				const stream = await navigator.mediaDevices.getUserMedia({
 					audio: true,
 				});
+
+				// Start speech recognition
+				if (recognition) {
+					rawTranscript = "";
+					interimTranscript = "";
+					recognition.start();
+				}
+
+				// Also record audio for backup
 				mediaRecorder = new MediaRecorder(stream, {
 					mimeType: "audio/webm",
 				});
@@ -65,6 +115,9 @@
 				};
 
 				mediaRecorder.onstop = async () => {
+					if (recognition) {
+						recognition.stop();
+					}
 					await processRecording();
 				};
 
@@ -97,18 +150,14 @@
 
 	async function processRecording() {
 		isProcessing = true;
-		status = "Transcribing locally via Whisper...";
+		status = "Processing transcript...";
 
 		try {
-			const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-
-			if (isModelReady) {
-				// Local transcription
-				rawTranscript = await transcribeAudio(audioBlob);
-			} else {
-				// Fallback to simulated output for demo
-				rawTranscript =
-					"Owner reports Buster has been vomiting for the past 4 hours. Three episodes noted. Dog is lethargic but still drinking water. No known toxin exposure. Physical examination reveals pink mucous membranes, CRT less than 2 seconds. Heart rate 110, respiratory rate 24. Mild abdominal discomfort on palpation. No discrete masses palpated. Suspect acute gastroenteritis versus dietary indiscretion. Rule out foreign body. Plan to administer subcutaneous fluids, LRS 500ml, and Cerenia at 1mg per kg. Fast for 12 hours then bland diet.";
+			// Use the speech recognition transcript if available
+			if (!rawTranscript || rawTranscript.trim().length === 0) {
+				status = "No speech detected - please try again";
+				isProcessing = false;
+				return;
 			}
 
 			status = "Redacting PII...";
@@ -121,9 +170,26 @@
 			);
 			console.log("Redaction report:", report);
 
-			status = "Structuring SOAP via AIVA...";
-			soapNote = await structureToSOAP(redactedTranscript, false);
-			transcript = formatSOAPAsText(soapNote);
+			status = "Structuring SOAP via AIVA (Cloud)...";
+
+			// Try Gemini first for higher quality, fall back to local rule-based AIVA
+			try {
+				const geminiSOAP = await structureViaGemini(
+					redactedTranscript,
+					aivaApiKey,
+				);
+				soapNote = geminiSOAP;
+				status = "Structured via Gemini Cloud";
+			} catch (geminiError) {
+				console.warn(
+					"Gemini failed, falling back to local AIVA:",
+					geminiError,
+				);
+				status = "Structuring SOAP via AIVA (Local)...";
+				soapNote = await structureToSOAP(redactedTranscript, false);
+			}
+
+			transcript = formatSOAPAsText(soapNote!);
 
 			// Count key insights (simple heuristic)
 			keyInsights =
@@ -221,7 +287,9 @@
 			</div>
 			<div>
 				<h1 class="text-2xl font-bold tracking-tight">
-					VetNotes<span class="text-blue-400">.me</span>
+					VetNotes<span class="text-blue-400"
+						>.{isPro ? "pro" : "me"}</span
+					>
 				</h1>
 				<p
 					class="text-xs text-white/40 uppercase tracking-widest font-semibold"
@@ -233,13 +301,13 @@
 
 		<div class="flex items-center space-x-6 text-sm">
 			<a
-				href="https://aivet.dev"
-				class="text-white/60 hover:text-white transition-colors"
-				>AIVet.dev</a
-			>
-			<a
 				href="https://aiva.vet"
 				class="text-white/60 hover:text-white transition-colors">AIVA</a
+			>
+			<a
+				href="https://aivet.dev"
+				class="text-white/60 hover:text-white transition-colors"
+				>AIVet</a
 			>
 			<a
 				href="https://aivet.dev/book"
@@ -255,19 +323,147 @@
 				class="text-white/60 hover:text-white transition-colors"
 				>VetSorcery</a
 			>
+			<a
+				href="https://vetnotes.pro"
+				class="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center space-x-2 border border-white/10"
+			>
+				<svg
+					class="w-4 h-4"
+					fill="none"
+					stroke="currentColor"
+					viewBox="0 0 24 24"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+					></path>
+				</svg>
+				<span>Download App</span>
+			</a>
 			<div class="h-4 w-px bg-white/10"></div>
 			<div class="flex items-center space-x-2">
-				<span
-					class="w-2 h-2 rounded-full {isModelReady
-						? 'bg-green-500'
-						: 'bg-yellow-500'} animate-pulse"
+				<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"
 				></span>
 				<span class="text-white/40 font-mono text-[10px]"
-					>{isModelReady ? "WHISPER_LOCAL" : "CLOUD_FALLBACK"}</span
+					>CLOUD_ACTIVE</span
 				>
 			</div>
+			<button
+				class="text-white/40 hover:text-white transition-colors"
+				on:click={() => (showSettings = true)}
+				title="Configure AIVA Key"
+			>
+				<svg
+					class="w-5 h-5"
+					fill="none"
+					stroke="currentColor"
+					viewBox="0 0 24 24"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+					></path>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+					></path>
+				</svg>
+			</button>
 		</div>
 	</header>
+
+	<!-- Settings Modal -->
+	{#if showSettings}
+		<div
+			class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center"
+		>
+			<div
+				class="bg-gray-900 border border-white/10 p-8 rounded-2xl w-full max-w-md shadow-2xl relative"
+			>
+				<button
+					class="absolute top-4 right-4 text-white/40 hover:text-white"
+					on:click={() => (showSettings = false)}
+				>
+					<svg
+						class="w-6 h-6"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+						><path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M6 18L18 6M6 6l12 12"
+						></path></svg
+					>
+				</button>
+				<h2 class="text-xl font-bold mb-4">AIVA Voice Configuration</h2>
+				<p class="text-sm text-gray-400 mb-6">
+					Enter your <strong>AIVA Voice API Key</strong> to enable
+					premium cloud structuring and
+					<span class="text-green-400">Revenue Hunter</span>.
+				</p>
+
+				<div
+					class="mb-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg"
+				>
+					<p class="text-xs text-blue-200 mb-2">Don't have a key?</p>
+					<a
+						href="https://aiva.vet"
+						target="_blank"
+						class="text-blue-400 hover:text-blue-300 font-bold text-sm flex items-center"
+					>
+						Start 14-Day Free Trial ($49/mo)
+						<svg
+							class="w-4 h-4 ml-1"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							><path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+							></path></svg
+						>
+					</a>
+				</div>
+
+				<div class="space-y-4">
+					<div>
+						<label
+							class="block text-xs uppercase text-gray-500 font-bold mb-2"
+							>API Key</label
+						>
+						<input
+							type="password"
+							bind:value={aivaApiKey}
+							placeholder="AIzaSy..."
+							class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
+						/>
+					</div>
+				</div>
+
+				<div class="mt-8 flex justify-end">
+					<button
+						class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-semibold transition-colors"
+						on:click={() => {
+							localStorage.setItem("aiva_api_key", aivaApiKey);
+							showSettings = false;
+						}}
+					>
+						Save Configuration
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<main class="grid lg:grid-cols-3 gap-8">
 		<!-- Sidebar / History -->
@@ -294,14 +490,8 @@
 					<p class="text-xs text-white/40 uppercase mb-1">
 						Engine Status
 					</p>
-					<p
-						class="text-sm font-medium {isModelReady
-							? 'text-green-400'
-							: 'text-yellow-400'}"
-					>
-						{isModelReady
-							? "Local Whisper Ready"
-							: "Loading Model..."}
+					<p class="text-sm font-medium text-blue-300">
+						{status}
 					</p>
 				</div>
 				<div
@@ -532,11 +722,7 @@
 					<span>ZERO DATA RETENTION POLICY</span>
 					<div class="flex space-x-4">
 						<span>PII REDACTION: ACTIVE</span>
-						<span
-							>LOCAL PROCESSING: {isModelReady
-								? "ENABLED"
-								: "FALLBACK"}</span
-						>
+						<span>LOCAL PROCESSING: ENABLED/FALLBACK</span>
 					</div>
 				</div>
 			</div>

@@ -1,31 +1,87 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const PROJECT_PROMPT = `
-Act as an expert Veterinary Scribe. 
-Convert the provided raw transcript from a veterinary consultation into a professional, structured SOAP note.
+// Initialize Gemini Client
+// WARNING: In a production app, calling this directly from the client exposes the API key.
+// Ensure your API key has referrer restrictions set in Google Cloud Console to only allow 'vetnotes.me' and 'vetnotes-mvp.web.app'.
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+
+const genAI = new GoogleGenerativeAI(API_KEY);
+const model = genAI.getGenerativeModel({
+    model: "gemini-1.5-flash",
+    generationConfig: {
+        temperature: 0.3, // Lower for clinical accuracy and consistency
+    }
+});
+
+const AIVA_SYSTEM_PROMPT = `
+You are AIVA (Artificial Intelligence Veterinary Assistant), a specialist in veterinary documentation and REVENUE CAPTURE.
+Your task is to structure raw veterinary consultation transcripts into a professional SOAP note and IDENITFY MISSED REVENUE.
 
 RULES:
-1. Maintain clinical terminology.
-2. Use standard SOAP headings (Subjective, Objective, Assessment, Plan).
-3. If specific diagnostics or dosages are mentioned, ensure they are captured accurately.
-4. Keep the tone professional but concise.
-5. If the transcript is unclear, use your best clinical judgment but do not hallucinate data points that were not present.
+1. Output MUST be a valid JSON object. Do not include markdown formatting (like \`\`\`json) in the response.
+2. The JSON schema must be exactly:
+   {
+	 "subjective": "string",
+	 "objective": "string",
+	 "assessment": "string",
+	 "plan": "string",
+	 "missedCharges": ["string"]
+   }
+3. Use professional medical terminology (e.g. "vomiting" -> "emesis").
+4. Be concise and telegraphic style.
 
-Transcript follows:
----
+REVENUE LEAKAGE DETECTION (CRITICAL):
+Scan the transcript for ANY procedures, items, or services that are often forgotten. If mentioned or implied, add to "missedCharges".
+Examples to watch for:
+- "Nail trim" / "Pedicure"
+- "Cytology" / "Ear swab" / "Skin scrape"
+- "Fluids" / "Subcutaneous fluids" -> "Fluid Administration" + "Fluid Bag"
+- "Hospitalization" / "Day stay"
+- "Medical Waste" (if injections given)
+- "E-Collar" / "Cone"
+- "Urinalysis" / "Cystocentesis"
+- "Sedation" / "Torbugesic" / "Dexdomitor"
+- "Reverse" (Antisedan)
+
+If the input is empty or nonsense, return fields with "Not reported".
 `;
 
-export async function structureNote(transcript: string, apiKey: string, customPrompt: string = "") {
-    try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+export async function structureViaGemini(transcript: string, customApiKey?: string): Promise<any> {
+    const keyToUse = customApiKey || API_KEY;
 
-        const prompt = (customPrompt || PROJECT_PROMPT) + "\n\nTranscript:\n" + transcript;
+    if (!keyToUse) {
+        console.error("Gemini API Key missing");
+        throw new Error("Gemini API Key not configured");
+    }
+
+    const genAI = new GoogleGenerativeAI(keyToUse);
+    const model = genAI.getGenerativeModel({
+        model: "gemini-1.5-flash",
+        generationConfig: {
+            temperature: 0.3,
+        }
+    });
+
+    const prompt = `
+    ${AIVA_SYSTEM_PROMPT}
+
+    RAW TRANSCRIPT:
+    "${transcript}"
+
+    JSON OUTPUT:
+    `;
+
+    try {
         const result = await model.generateContent(prompt);
         const response = await result.response;
-        return response.text();
+        const text = response.text();
+
+        // Clean up markdown code blocks if the model includes them despite instructions
+        const jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+        return JSON.parse(jsonStr);
     } catch (error) {
-        console.error("Gemini Error:", error);
+        console.error("Gemini API Error:", error);
         throw error;
     }
 }
