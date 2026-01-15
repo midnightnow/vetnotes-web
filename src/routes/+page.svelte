@@ -233,6 +233,15 @@
 
 		<div class="flex items-center space-x-6 text-sm">
 			<a
+				href="https://aivet.dev"
+				class="text-white/60 hover:text-white transition-colors"
+				>AIVet.dev</a
+			>
+			<a
+				href="https://aiva.vet"
+				class="text-white/60 hover:text-white transition-colors">AIVA</a
+			>
+			<a
 				href="https://vetnotes.pro"
 				class="text-white/60 hover:text-white transition-colors"
 				>VetNotes.pro</a
