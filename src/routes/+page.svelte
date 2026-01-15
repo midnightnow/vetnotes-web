@@ -301,27 +301,23 @@
 
 		<div class="flex items-center space-x-6 text-sm">
 			<a
-				href="https://aiva.vet"
+				href="https://aiva.help"
 				class="text-white/60 hover:text-white transition-colors">AIVA</a
 			>
 			<a
 				href="https://aivet.dev"
 				class="text-white/60 hover:text-white transition-colors"
-				>AIVet</a
-			>
-			<a
-				href="https://aivet.dev/book"
-				class="text-white/60 hover:text-white transition-colors">Book</a
+				>AIVET</a
 			>
 			<a
 				href="https://vetnotes.pro"
 				class="text-white/60 hover:text-white transition-colors"
-				>VetNotes.pro</a
+				>Macagent Pro</a
 			>
 			<a
 				href="https://vetsorcery.com"
 				class="text-white/60 hover:text-white transition-colors"
-				>VetSorcery</a
+				>Vetsorcery</a
 			>
 			<a
 				href="https://vetnotes.pro"
@@ -340,7 +336,7 @@
 						d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
 					></path>
 				</svg>
-				<span>Download App</span>
+				<span>Download Macagent</span>
 			</a>
 			<div class="h-4 w-px bg-white/10"></div>
 			<div class="flex items-center space-x-2">

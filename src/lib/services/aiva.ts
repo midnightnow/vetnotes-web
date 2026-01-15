@@ -193,23 +193,110 @@ export function formatSOAPAsText(note: SOAPNote): string {
 export async function pushToPIMS(note: SOAPNote, pimsType: 'ezyvet' | 'rxworks' | 'ascend' = 'ezyvet'): Promise<{ success: boolean; message: string }> {
     console.log(`Pushing to ${pimsType}...`, note);
 
-    // Simulate API latency
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // PIMS API Configuration
+    // In production, these would be loaded from environment variables or user settings
+    const pimsConfig: Record<string, { baseUrl: string; endpoint: string }> = {
+        ezyvet: {
+            baseUrl: 'https://api.ezyvet.com/v1',
+            endpoint: '/clinicalnotes'
+        },
+        rxworks: {
+            baseUrl: 'https://api.rxworks.com.au/v2',
+            endpoint: '/patients/notes'
+        },
+        ascend: {
+            baseUrl: 'https://api.vetsourcepms.com/ascend/v1',
+            endpoint: '/medical-records'
+        }
+    };
 
-    // In a real implementation, this would call a secure cloud function 
-    // or a local PIMS bridge (like Hardcard or a custom driver)
+    const config = pimsConfig[pimsType];
 
-    const success = Math.random() > 0.1; // 90% success rate for simulation
+    // Format the SOAP note for PIMS ingestion
+    const payload = {
+        clinicalNote: {
+            subjective: note.subjective,
+            objective: note.objective,
+            assessment: note.assessment,
+            plan: note.plan,
+            createdAt: new Date().toISOString(),
+            source: 'VetNotes.pro',
+            version: '4.0'
+        },
+        revenueFlags: note.missedCharges || [],
+        metadata: {
+            provider: pimsType,
+            sentAt: new Date().toISOString()
+        }
+    };
 
-    if (success) {
-        return {
-            success: true,
-            message: `Successfully pushed to ${pimsType}. Patient record updated.`
-        };
-    } else {
+    try {
+        // Check if user has configured PIMS credentials
+        const pimsToken = typeof window !== 'undefined'
+            ? localStorage.getItem(`pims_${pimsType}_token`)
+            : null;
+
+        if (!pimsToken) {
+            return {
+                success: false,
+                message: `No ${pimsType.toUpperCase()} credentials configured. Go to Settings → PIMS Integration.`
+            };
+        }
+
+        // In production, this would be a real API call:
+        // const response = await fetch(`${config.baseUrl}${config.endpoint}`, {
+        //     method: 'POST',
+        //     headers: {
+        //         'Authorization': `Bearer ${pimsToken}`,
+        //         'Content-Type': 'application/json',
+        //         'X-VetNotes-Source': 'pro'
+        //     },
+        //     body: JSON.stringify(payload)
+        // });
+
+        // Simulate API latency (remove in production)
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // Simulate 95% success rate for demo
+        const success = Math.random() > 0.05;
+
+        if (success) {
+            return {
+                success: true,
+                message: `✅ Synced to ${pimsType.toUpperCase()}. Clinical note attached to patient record.`
+            };
+        } else {
+            return {
+                success: false,
+                message: `Connection to ${pimsType.toUpperCase()} timed out. Check network or refresh token.`
+            };
+        }
+    } catch (error) {
+        console.error('PIMS push error:', error);
         return {
             success: false,
-            message: `Connection to ${pimsType} timed out. Please check your credentials in settings.`
+            message: `PIMS integration error: ${error instanceof Error ? error.message : 'Unknown error'}`
         };
     }
 }
+
+// Helper to check if user has any PIMS configured
+export function hasConfiguredPIMS(): boolean {
+    if (typeof window === 'undefined') return false;
+    return !!(
+        localStorage.getItem('pims_ezyvet_token') ||
+        localStorage.getItem('pims_rxworks_token') ||
+        localStorage.getItem('pims_ascend_token')
+    );
+}
+
+// Get list of configured PIMS providers
+export function getConfiguredPIMSProviders(): string[] {
+    if (typeof window === 'undefined') return [];
+    const providers: string[] = [];
+    if (localStorage.getItem('pims_ezyvet_token')) providers.push('ezyvet');
+    if (localStorage.getItem('pims_rxworks_token')) providers.push('rxworks');
+    if (localStorage.getItem('pims_ascend_token')) providers.push('ascend');
+    return providers;
+}
+
