@@ -9,7 +9,9 @@
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"deploy:mvp": "npm run build && firebase deploy -P mvp --only hosting",
+		"deploy:pro": "npm run build && firebase deploy -P pro --only hosting"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-static": "^3.0.10",

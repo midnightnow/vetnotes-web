@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "vetnotes-sovereign"
+    "mvp": "vetnotes-mvp",
+    "pro": "vetnotes-pro"
   }
 }

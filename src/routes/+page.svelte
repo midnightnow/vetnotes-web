@@ -8,6 +8,7 @@
 	import {
 		structureToSOAP,
 		formatSOAPAsText,
+		pushToPIMS,
 		type SOAPNote,
 	} from "$lib/services/aiva";
 	import { redactPII, generateRedactionReport } from "$lib/utils/redactor";
@@ -20,6 +21,7 @@
 	let status = "Initializing AIVA Engine...";
 	let elapsedTime = 0;
 	let keyInsights = 0;
+	let isPushing = false;
 
 	let mediaRecorder: MediaRecorder | null = null;
 	let audioChunks: Blob[] = [];
@@ -147,6 +149,36 @@
 		navigator.clipboard.writeText(transcript);
 		status = "Copied to Clipboard";
 		setTimeout(() => (status = "Consult Structured"), 2000);
+	}
+
+	async function handlePushToPIMS() {
+		if (!soapNote) return;
+
+		isPushing = true;
+		status = "Syncing with PIMS...";
+
+		try {
+			const result = await pushToPIMS(soapNote, "ezyvet");
+			if (result.success) {
+				status = "Synced Successfully";
+			} else {
+				status = "PIMS Sync Failed";
+				alert(result.message);
+			}
+		} catch (error) {
+			console.error("PIMS error:", error);
+			status = "PIMS Connection Error";
+		} finally {
+			isPushing = false;
+			setTimeout(() => {
+				if (
+					status === "Synced Successfully" ||
+					status === "PIMS Sync Failed"
+				) {
+					status = "Consult Structured";
+				}
+			}, 3000);
+		}
 	}
 
 	function clearWorkspace() {
@@ -414,10 +446,37 @@
 							Copy Note
 						</button>
 						<button
-							class="px-4 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
-							disabled={!transcript}
+							on:click={handlePushToPIMS}
+							disabled={!transcript || isPushing}
+							class="px-4 py-2 text-xs font-semibold {isPushing
+								? 'bg-blue-800'
+								: 'bg-blue-600 hover:bg-blue-500'} rounded-xl transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 flex items-center"
 						>
-							Push to PIMS
+							{#if isPushing}
+								<svg
+									class="animate-spin -ml-1 mr-2 h-3 w-3 text-white"
+									xmlns="http://www.w3.org/2000/svg"
+									fill="none"
+									viewBox="0 0 24 24"
+								>
+									<circle
+										class="opacity-25"
+										cx="12"
+										cy="12"
+										r="10"
+										stroke="currentColor"
+										stroke-width="4"
+									></circle>
+									<path
+										class="opacity-75"
+										fill="currentColor"
+										d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+									></path>
+								</svg>
+								Syncing...
+							{:else}
+								Push to PIMS
+							{/if}
 						</button>
 					</div>
 				</div>

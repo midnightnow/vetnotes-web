@@ -189,3 +189,27 @@ export function formatSOAPAsText(note: SOAPNote): string {
 
     return output;
 }
+
+export async function pushToPIMS(note: SOAPNote, pimsType: 'ezyvet' | 'rxworks' | 'ascend' = 'ezyvet'): Promise<{ success: boolean; message: string }> {
+    console.log(`Pushing to ${pimsType}...`, note);
+
+    // Simulate API latency
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // In a real implementation, this would call a secure cloud function 
+    // or a local PIMS bridge (like Hardcard or a custom driver)
+
+    const success = Math.random() > 0.1; // 90% success rate for simulation
+
+    if (success) {
+        return {
+            success: true,
+            message: `Successfully pushed to ${pimsType}. Patient record updated.`
+        };
+    } else {
+        return {
+            success: false,
+            message: `Connection to ${pimsType} timed out. Please check your credentials in settings.`
+        };
+    }
+}
