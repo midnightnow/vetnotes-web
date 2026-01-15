@@ -242,6 +242,10 @@
 				class="text-white/60 hover:text-white transition-colors">AIVA</a
 			>
 			<a
+				href="https://aivet.dev/book"
+				class="text-white/60 hover:text-white transition-colors">Book</a
+			>
+			<a
 				href="https://vetnotes.pro"
 				class="text-white/60 hover:text-white transition-colors"
 				>VetNotes.pro</a
