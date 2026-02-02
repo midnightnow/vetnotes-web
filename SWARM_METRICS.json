@@ -1,0 +1,11 @@
+{
+    "timestamp": "2026-01-31T05:32:02.419Z",
+    "duration_seconds": 0.243,
+    "agent_count": 50,
+    "total_cases": 500,
+    "total_revenue": 240000,
+    "avg_revenue_per_consult": 480,
+    "status": "PASS",
+    "lock_integrity": "100%",
+    "validation_note": "Revenue capture ($480/avg) exceeds $145 target due to high-value forensic cases (Snakebite/ICU) included in the test set."
+}

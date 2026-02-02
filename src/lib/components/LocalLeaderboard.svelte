@@ -4,11 +4,41 @@
     // Mock data for neighborhood ranking
     const neighborhood = "Smithfield / Edmonton";
     const rankings = [
-        { name: "Djari_Sentinel", score: 14200, avatar: "🐉", isUser: false },
-        { name: "Ranger_Mia", score: 12500, avatar: "🦁", isUser: false },
-        { name: "You", score: 8400, avatar: "⚡", isUser: true },
-        { name: "BugHunter_26", score: 7200, avatar: "🐜", isUser: false },
-        { name: "Eco_Warrior", score: 5100, avatar: "🌿", isUser: false },
+        {
+            name: "Djari_Sentinel",
+            score: 14200,
+            avatar: "/assets/pet_dragon_pro.png",
+            isUser: false,
+            type: "image",
+        },
+        {
+            name: "Ranger_Mia",
+            score: 12500,
+            avatar: "🦁",
+            isUser: false,
+            type: "emoji",
+        },
+        {
+            name: "You",
+            score: 8400,
+            avatar: "/assets/dallas_avatar.jpg",
+            isUser: true,
+            type: "image",
+        },
+        {
+            name: "BugHunter_26",
+            score: 7200,
+            avatar: "/assets/icon_fire_ant_pro.png",
+            isUser: false,
+            type: "image",
+        },
+        {
+            name: "Eco_Warrior",
+            score: 5100,
+            avatar: "🌿",
+            isUser: false,
+            type: "emoji",
+        },
     ];
 
     export let isOpen = false;
@@ -16,7 +46,7 @@
 
 {#if isOpen}
     <div class="leaderboard-overlay" transition:fade>
-        <div class="leaderboard-modal" in:fly={{ y: 50 }}>
+        <div class="leaderboard-modal glass-panel" in:fly={{ y: 50 }}>
             <header>
                 <div class="header-main">
                     <span class="loc-tag">📍 {neighborhood}</span>
@@ -53,7 +83,14 @@
 
             <div class="community-boss-battle">
                 <div class="battle-header">
-                    <span class="battle-title">⚔️ SMITHFIELD SCOURGE</span>
+                    <div class="flex items-center gap-2">
+                        <img
+                            src="/assets/icon_fire_ant_pro.png"
+                            class="w-6 h-6 pixelated"
+                            alt="Ant"
+                        />
+                        <span class="battle-title">SMITHFIELD SCOURGE</span>
+                    </div>
                     <span class="battle-target">42 / 100 REPORTS</span>
                 </div>
                 <div class="battle-progress">
@@ -74,7 +111,17 @@
                         in:fly={{ x: -20, delay: i * 50 }}
                     >
                         <div class="rank-num">#{i + 1}</div>
-                        <div class="rank-avatar">{rank.avatar}</div>
+                        <div class="rank-avatar">
+                            {#if rank.type === "image"}
+                                <img
+                                    src={rank.avatar}
+                                    alt={rank.name}
+                                    class="w-8 h-8 object-contain rounded-full"
+                                />
+                            {:else}
+                                {rank.avatar}
+                            {/if}
+                        </div>
                         <div class="rank-info">
                             <span class="name">{rank.name}</span>
                             <span class="points"
@@ -98,7 +145,7 @@
     .leaderboard-overlay {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.8);
+        background: rgba(0, 0, 0, 0.85);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -107,27 +154,49 @@
         padding: 1.5rem;
     }
 
+    .glass-panel {
+        background: rgba(17, 24, 39, 0.95);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+
     .leaderboard-modal {
-        background: #111;
         width: 100%;
         max-width: 400px;
         border-radius: 24px;
-        border: 1px solid #333;
         overflow: hidden;
         color: white;
     }
 
     header {
         padding: 1.5rem;
-        background: #1a1a1a;
+        background: rgba(255, 255, 255, 0.02);
         position: relative;
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .header-main {
         padding-right: 2rem;
+    }
+
+    .loc-tag {
+        font-size: 0.65rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        color: rgba(255, 255, 255, 0.4);
+        display: block;
+        margin-bottom: 0.25rem;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+        font-weight: 900;
+        margin: 0;
+        color: white;
     }
 
     .readiness-gauge {
@@ -143,7 +212,7 @@
         font-size: 0.65rem;
         font-weight: 800;
         letter-spacing: 0.1em;
-        color: #999;
+        color: rgba(255, 255, 255, 0.5);
     }
 
     .gauge-header strong {
@@ -153,7 +222,7 @@
 
     .gauge-track {
         height: 6px;
-        background: #333;
+        background: rgba(255, 255, 255, 0.1);
         border-radius: 10px;
         overflow: hidden;
     }
@@ -167,8 +236,8 @@
     .suburban-stats {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        background: #161616;
-        border-bottom: 1px solid #333;
+        background: rgba(0, 0, 0, 0.2);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .sub-stat {
@@ -177,7 +246,7 @@
         flex-direction: column;
         align-items: center;
         gap: 0.25rem;
-        border-right: 1px solid #222;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .sub-stat:last-child {
@@ -187,6 +256,7 @@
     .sub-stat .val {
         font-size: 1.1rem;
         font-weight: 950;
+        color: white;
     }
 
     .sub-stat .val.up {
@@ -196,7 +266,7 @@
     .sub-stat .lab {
         font-size: 0.55rem;
         font-weight: 800;
-        color: #666;
+        color: rgba(255, 255, 255, 0.4);
         letter-spacing: 0.05em;
     }
 
@@ -206,9 +276,13 @@
         right: 1rem;
         background: none;
         border: none;
-        color: white;
+        color: rgba(255, 255, 255, 0.4);
         font-size: 1.2rem;
         cursor: pointer;
+        transition: color 0.2s;
+    }
+    .close-btn:hover {
+        color: white;
     }
 
     .community-boss-battle {
@@ -218,7 +292,7 @@
             rgba(245, 158, 11, 0.1) 0%,
             transparent 100%
         );
-        border-bottom: 1px solid #333;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .battle-header {
@@ -239,14 +313,16 @@
         font-size: 0.7rem;
         font-weight: 800;
         opacity: 0.7;
+        color: rgba(255, 255, 255, 0.8);
     }
 
     .battle-progress {
         height: 12px;
-        background: #222;
+        background: rgba(0, 0, 0, 0.3);
         border-radius: 6px;
         overflow: hidden;
         margin-bottom: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .progress-fill {
@@ -258,7 +334,7 @@
 
     .battle-hint {
         font-size: 0.75rem;
-        color: #999;
+        color: rgba(255, 255, 255, 0.5);
         margin: 0;
     }
 
@@ -270,7 +346,7 @@
         font-size: 0.65rem;
         font-weight: 900;
         letter-spacing: 0.1em;
-        color: #666;
+        color: rgba(255, 255, 255, 0.4);
         padding: 0 0.5rem 0.5rem 0.5rem;
     }
 
@@ -286,9 +362,9 @@
         align-items: center;
         gap: 1rem;
         padding: 1rem;
-        background: #1e1e1e;
+        background: rgba(255, 255, 255, 0.03);
         border-radius: 16px;
-        border: 1px solid transparent;
+        border: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .rank-item.is-user {
@@ -299,7 +375,7 @@
     .rank-num {
         font-weight: 900;
         width: 30px;
-        color: #666;
+        color: rgba(255, 255, 255, 0.3);
     }
 
     .rank-item.is-user .rank-num {
@@ -308,6 +384,15 @@
 
     .rank-avatar {
         font-size: 1.5rem;
+        width: 2rem;
+        height: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .pixelated {
+        image-rendering: pixelated;
     }
 
     .rank-info {
@@ -318,19 +403,22 @@
 
     .name {
         font-weight: 700;
+        color: white;
     }
     .points {
         font-size: 0.8rem;
         opacity: 0.5;
         font-family: monospace;
+        color: rgba(255, 255, 255, 0.8);
     }
 
     .cta {
         padding: 1.5rem;
-        background: #1a1a1a;
+        background: rgba(0, 0, 0, 0.3);
         text-align: center;
         font-size: 0.85rem;
-        color: #999;
+        color: rgba(255, 255, 255, 0.5);
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .cta strong {

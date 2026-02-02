@@ -310,8 +310,8 @@
             class="select select-bordered select-sm bg-base-200/50"
             bind:value={provider}
           >
-            <option value="gemini">Gemini (Cloud)</option>
-            <option value="ollama">Ollama (Local)</option>
+            <option value="gemini">Gemini (Atlas)</option>
+            <option value="ollama">Ollama (Sovereign)</option>
           </select>
         </div>
         {#if provider === "gemini"}

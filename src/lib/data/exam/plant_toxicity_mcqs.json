@@ -1,0 +1,86 @@
+[
+    {
+        "id": "TOX_001",
+        "axis": "tox",
+        "question": "Which class of plant secondary metabolites is most commonly associated with direct effects on the nervous system?",
+        "options": [
+            "Glycosides",
+            "Alkaloids",
+            "Oxalates",
+            "Terpenoids"
+        ],
+        "answer": "Alkaloids",
+        "weight": 1.2,
+        "rationale": "Alkaloids (e.g., nicotine, atropine) interact with neurotransmitter receptors and ion channels causing neurological effects."
+    },
+    {
+        "id": "TOX_002",
+        "axis": "tox",
+        "question": "Digitalis toxicity in livestock primarily interferes with which physiological process?",
+        "options": [
+            "Hepatic detoxification enzymes",
+            "Renal calcium excretion",
+            "Cardiac sodium–potassium ATPase activity",
+            "Neuromuscular acetylcholine release"
+        ],
+        "answer": "Cardiac sodium–potassium ATPase activity",
+        "weight": 1.5,
+        "rationale": "Cardiac glycosides disrupt ion gradients, leading to arrhythmias."
+    },
+    {
+        "id": "TOX_003",
+        "axis": "tox",
+        "question": "Insoluble calcium oxalate crystals cause tissue damage primarily by:",
+        "options": [
+            "Inhibiting protein synthesis",
+            "Blocking mitochondrial respiration",
+            "Mechanical irritation of mucous membranes",
+            "Chelating magnesium ions"
+        ],
+        "answer": "Mechanical irritation of mucous membranes",
+        "weight": 1.1,
+        "rationale": "Needle-like raphides physically damage tissue and provoke inflammation."
+    },
+    {
+        "id": "PATH_001",
+        "axis": "path",
+        "question": "In agricultural biosecurity, EDRR stands for:",
+        "options": [
+            "Environmental Disease Risk Reduction",
+            "Early Detection and Rapid Response",
+            "Ecological Defense and Recovery Regulation",
+            "Emergency Disease Reporting Requirement"
+        ],
+        "answer": "Early Detection and Rapid Response",
+        "weight": 1.5,
+        "rationale": "EDRR is foundational to invasive species containment strategies."
+    },
+    {
+        "id": "PATH_002",
+        "axis": "path",
+        "question": "Which pathway is MOST responsible for the long-distance spread of many invasive plant pathogens?",
+        "options": [
+            "Natural root grafting",
+            "Soil nematodes",
+            "Human-mediated transport",
+            "Pollinator insects"
+        ],
+        "answer": "Human-mediated transport",
+        "weight": 1.3,
+        "rationale": "Movement of soil, plants, and untreated wood is the dominant vector at scale."
+    },
+    {
+        "id": "POLICY_001",
+        "axis": "path",
+        "question": "A 'noxious weed' designation primarily indicates that a plant is:",
+        "options": [
+            "Highly toxic to humans",
+            "Invasive and legally regulated",
+            "A threat only to native ecosystems",
+            "Genetically modified"
+        ],
+        "answer": "Invasive and legally regulated",
+        "weight": 1.0,
+        "rationale": "Noxious status is a legal classification, not purely a toxicological one."
+    }
+]

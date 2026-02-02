@@ -2,5 +2,21 @@
   "projects": {
     "mvp": "vetnotes-mvp",
     "pro": "vetnotes-pro"
-  }
+  },
+  "targets": {
+    "vetnotes-mvp": {
+      "hosting": {
+        "dev": [
+          "vetsorcery-dev"
+        ],
+        "staging": [
+          "vetsorcery-staging"
+        ],
+        "production": [
+          "vetsorcery"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

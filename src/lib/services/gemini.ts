@@ -46,7 +46,9 @@ Examples to watch for:
 If the input is empty or nonsense, return fields with "Not reported".
 `;
 
-export async function structureViaGemini(transcript: string, customApiKey?: string): Promise<any> {
+export const structureNote = structureViaGemini;
+
+export async function structureViaGemini(transcript: string, customApiKey?: string, templatePrompt?: string): Promise<any> {
     const keyToUse = customApiKey || API_KEY;
 
     if (!keyToUse) {
@@ -63,7 +65,7 @@ export async function structureViaGemini(transcript: string, customApiKey?: stri
     });
 
     const prompt = `
-    ${AIVA_SYSTEM_PROMPT}
+    ${templatePrompt || AIVA_SYSTEM_PROMPT}
 
     RAW TRANSCRIPT:
     "${transcript}"

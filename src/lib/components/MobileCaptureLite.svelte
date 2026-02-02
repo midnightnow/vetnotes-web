@@ -7,7 +7,6 @@
     const dispatch = createEventDispatcher();
 
     // Props
-    export let userLocation: { lat: number; lng: number } | null = null;
     export let currentLens: "cozy" | "adventure" | "tactical" = "adventure";
 
     // State
@@ -347,26 +346,26 @@
     .tl {
         top: 0;
         left: 0;
-        border_right: none;
-        border_bottom: none;
+        border-right: none;
+        border-bottom: none;
     }
     .tr {
         top: 0;
         right: 0;
-        border_left: none;
-        border_bottom: none;
+        border-left: none;
+        border-bottom: none;
     }
     .bl {
         bottom: 0;
         left: 0;
-        border_top: none;
-        border_right: none;
+        border-top: none;
+        border-right: none;
     }
     .br {
         bottom: 0;
         right: 0;
-        border_top: none;
-        border_left: none;
+        border-top: none;
+        border-left: none;
     }
 
     .scan-trigger {

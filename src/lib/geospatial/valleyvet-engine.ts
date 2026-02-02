@@ -8,7 +8,7 @@
  * Connects to VetNotes API backend for real-time geo-risk assessment.
  */
 
-import { Loader } from '@googlemaps/js-api-loader';
+import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -150,6 +150,20 @@ export interface BossBattle {
     lore: {
         announcement: string;
         victory: string;
+    };
+}
+
+export interface OutbreakZone {
+    id: string;
+    epicenter: { lat: number; lng: number };
+    disease: string;
+    declaredDate: Date;
+    confirmedCases: number;
+    suspectedCases: number;
+    movementBan: boolean;
+    veterinaryResources: {
+        vetsDeployed: number;
+        vetsNeeded: number;
     };
 }
 
@@ -347,23 +361,24 @@ export const MAP_MODES: Record<string, MapMode> = {
 
 export class ValleyVetEngine {
     private map: google.maps.Map | null = null;
-    private loader: Loader;
     private outbreakZones: Map<string, google.maps.Circle[]> = new Map();
-    private markers: google.maps.Marker[] = [];
+    private markers: any[] = []; // Changed to any to avoid strict type issues with Marker vs AdvancedMarker
     private currentMode: MapMode;
+    private apiKey: string;
 
     // Callbacks
     public onZoonoticAlert: ((profile: ZoonoticRiskProfile) => void) | null = null;
     public onModeChange: ((mode: MapMode) => void) | null = null;
-    public onOutbreakClick: ((outbreak: BossBattle) => void) | null = null; // Changed OutbreakZone to BossBattle for the new engine
+    public onOutbreakClick: ((outbreak: OutbreakZone | BossBattle) => void) | null = null;
     public onBossEventTriggered: ((event: BossBattle) => void) | null = null;
 
     constructor(apiKey: string) {
-        this.loader = new Loader({
-            apiKey,
+        this.apiKey = apiKey;
+        setOptions({
+            apiKey: apiKey,
             version: 'weekly',
             libraries: ['visualization', 'places', 'geometry']
-        });
+        } as any);
         this.currentMode = MAP_MODES.happy_valley;
     }
 
@@ -379,9 +394,7 @@ export class ValleyVetEngine {
         this.currentMode = MAP_MODES[mode];
 
         // MOCK MODE CHECK
-        // If loader has no API key (we'll check this by catching the load error or pre-check)
-        // Actually, we'll rely on the caller to handle the key, but locally:
-        if ((this.loader as any).apiKey === "" || (this.loader as any).apiKey === "undefined") {
+        if (!this.apiKey || this.apiKey === "your_key_here") {
             console.warn("⚠️ RUNNING IN MOCK MODE: No Google Maps API Key found.");
             container.style.backgroundColor = "#1a3a4a";
             container.style.display = "flex";
@@ -400,8 +413,8 @@ export class ValleyVetEngine {
         }
 
         try {
-            await this.loader.load();
-            this.map = new google.maps.Map(container, {
+            const { Map } = await importLibrary('maps') as google.maps.MapsLibrary;
+            this.map = new Map(container, {
                 center: this.currentMode.center,
                 zoom: this.currentMode.zoom,
                 styles: this.currentMode.style,

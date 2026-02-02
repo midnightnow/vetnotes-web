@@ -1,5 +1,14 @@
 <script>
-	import '../app.css';
+	import "../app.css";
+	import GlobalNav from "$lib/components/GlobalNav.svelte";
+	import { page } from "$app/stores";
 </script>
 
-<slot />
+<div class="relative min-h-screen">
+	{#if $page.url.pathname !== "/"}
+		<GlobalNav />
+	{/if}
+	<main>
+		<slot />
+	</main>
+</div>

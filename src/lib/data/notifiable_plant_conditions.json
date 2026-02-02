@@ -1,0 +1,49 @@
+{
+    "australian_biosecurity": [
+        {
+            "id": "XYELLA_FASTIDIOSA",
+            "common_names": [
+                "Xylella",
+                "Olive Quick Decline"
+            ],
+            "jurisdictions": [
+                "AU",
+                "QLD"
+            ],
+            "reporting_window_hrs": 24,
+            "ui_flag": "⚠️ NOTIFIABLE: Report to Biosecurity Queensland within 24h",
+            "legal_reference": "Biosecurity Act 2014 (Qld) s.61",
+            "export_template": "regulatory_submission_plant"
+        },
+        {
+            "id": "CANDIDATUS_LIBERIBACTER",
+            "common_names": [
+                "Citrus Greening",
+                "HLB"
+            ],
+            "jurisdictions": [
+                "AU",
+                "QLD"
+            ],
+            "reporting_window_hrs": 24,
+            "ui_flag": "⚠️ NOTIFIABLE: Report suspect Citrus Greening immediately",
+            "legal_reference": "Biosecurity Act 2014 (Qld)",
+            "export_template": "regulatory_submission_plant"
+        },
+        {
+            "id": "SOLENOPSIS_INVICTA",
+            "common_names": [
+                "Red Imported Fire Ant",
+                "RIFA"
+            ],
+            "jurisdictions": [
+                "AU",
+                "QLD"
+            ],
+            "reporting_window_hrs": 24,
+            "ui_flag": "⚠️ CRITICAL: Notifiable Fire Ant detection",
+            "legal_reference": "Biosecurity Act 2014 (Qld)",
+            "export_template": "regulatory_submission_pest"
+        }
+    ]
+}

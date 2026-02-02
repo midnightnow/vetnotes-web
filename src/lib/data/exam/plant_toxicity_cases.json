@@ -1,0 +1,66 @@
+[
+    {
+        "id": "CASE_TREELINE_MORTALITY",
+        "title": "Cattle Mortality After Storm",
+        "scenario": "A client reports five cattle dead near a treeline after a heavy storm. You find wilted branches of Prunus serotina (Wild Black Cherry) in the pasture.",
+        "required_axes": [
+            "tox",
+            "path",
+            "vital"
+        ],
+        "expected_responses": {
+            "tox": "Cyanogenic glycosides (Prunasin)",
+            "path": "Mechanical/Storm damage (vector for ingestion of wilted leaves)",
+            "vital": "Bright 'cherry-red' mucous membranes"
+        },
+        "forensic_question": "Explain the biochemical mechanism of 'cherry-red' mucous membranes in this case."
+    },
+    {
+        "id": "CASE_CITRUS_NURSERY",
+        "title": "Notifiable Pathogen Detection",
+        "scenario": "Citrus trees at Cairns nursery showing yellow shoots, blotchy mottle. Asian citrus psyllid (Diaphorina citri) observed on new growth.",
+        "required_axes": [
+            "tox",
+            "path",
+            "vital"
+        ],
+        "expected_responses": {
+            "tox": "None - pathogen not toxin-mediated",
+            "path": "Candidatus Liberibacter asiaticus (Huanglongbing/Citrus Greening) - Vector: Psyllid",
+            "vital": "Tree decline metrics: canopy thinning %, fruit drop rate"
+        },
+        "forensic_question": "Outline the EXACT legal sequence per Biosecurity Act 2014. What happens if owner refuses quarantine?"
+    },
+    {
+        "id": "CASE_KELPIE_RENAL",
+        "title": "Canine Renal Failure",
+        "scenario": "Kelpie with acute oliguria after roaming rural property. Owner reports dog chewed 'lily-like plant' with orange berries near creek line.",
+        "required_axes": [
+            "tox",
+            "path",
+            "vital"
+        ],
+        "expected_responses": {
+            "tox": "Insoluble calcium oxalate crystals (e.g., Arum maculatum)",
+            "path": "Ingestion of insoluble calcium oxalate -> mechanical crystal deposition in nephrons",
+            "vital": "Hyperoxaluria on urinalysis, rising creatinine, calcium oxalate crystalluria"
+        },
+        "forensic_question": "Why is ethylene glycol antidote (fomepizole) ineffective in this specific botanical toxicity?"
+    },
+    {
+        "id": "CASE_FIRE_ANT_BREACH",
+        "title": "Biosecurity Breach Investigation",
+        "scenario": "Fire ant (Solenopsis invicta) mound discovered at Atherton Tablelands tourism site. Soil samples from recent landscaping project test positive.",
+        "required_axes": [
+            "tox",
+            "path",
+            "vital"
+        ],
+        "expected_responses": {
+            "tox": "Solenopsin alkaloids -> pustular dermatitis, anaphylaxis risk",
+            "path": "Imported soil -> undetected queen transport -> colony establishment",
+            "vital": "Human sting incidence rate, native ant displacement metrics"
+        },
+        "forensic_question": "As the attending vet, what's your legal reporting obligation under Biosecurity Act 2014?"
+    }
+]

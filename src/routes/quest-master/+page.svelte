@@ -224,12 +224,50 @@
                                 >{discovery.ai_classification?.species ||
                                     "Unidentified"}</span
                             >
-                            <span class="confidence">
-                                {Math.round(
-                                    (discovery.ai_classification?.confidence ||
-                                        0) * 100,
-                                )}% confidence
-                            </span>
+                            <div class="flex items-center gap-2">
+                                <div class="relative w-8 h-8">
+                                    <svg
+                                        class="w-full h-full transform -rotate-90"
+                                    >
+                                        <circle
+                                            cx="16"
+                                            cy="16"
+                                            r="14"
+                                            stroke="currentColor"
+                                            stroke-width="3"
+                                            fill="transparent"
+                                            class="text-white/5"
+                                        />
+                                        <circle
+                                            cx="16"
+                                            cy="16"
+                                            r="14"
+                                            stroke="currentColor"
+                                            stroke-width="3"
+                                            fill="transparent"
+                                            class="text-blue-500"
+                                            stroke-dasharray="88"
+                                            stroke-dashoffset={88 -
+                                                88 *
+                                                    (discovery.ai_classification
+                                                        ?.confidence || 0)}
+                                            stroke-linecap="round"
+                                        />
+                                    </svg>
+                                    <span
+                                        class="absolute inset-0 flex items-center justify-center text-[8px] font-bold"
+                                    >
+                                        {Math.round(
+                                            (discovery.ai_classification
+                                                ?.confidence || 0) * 100,
+                                        )}%
+                                    </span>
+                                </div>
+                                <span
+                                    class="text-[10px] text-white/40 uppercase font-bold tracking-tighter"
+                                    >Confidence</span
+                                >
+                            </div>
                         </div>
 
                         <div class="meta">
@@ -317,21 +355,22 @@
                     <button
                         class="btn-verify"
                         on:click={() =>
-                            verifyDiscovery(selectedDiscovery.id, true)}
+                            verifyDiscovery(selectedDiscovery?.id || "", true)}
                     >
                         ✅ Verify Discovery
                     </button>
                     <button
                         class="btn-reject"
                         on:click={() =>
-                            verifyDiscovery(selectedDiscovery.id, false)}
+                            verifyDiscovery(selectedDiscovery?.id || "", false)}
                     >
                         ❌ Reject (False Positive)
                     </button>
                 {:else if selectedDiscovery.quest_status === "VERIFIED"}
                     <button
                         class="btn-resolve"
-                        on:click={() => resolveDiscovery(selectedDiscovery.id)}
+                        on:click={() =>
+                            resolveDiscovery(selectedDiscovery?.id || "")}
                     >
                         🏁 Mark Resolved
                     </button>

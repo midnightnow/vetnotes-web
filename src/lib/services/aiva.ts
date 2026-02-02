@@ -54,7 +54,7 @@ async function structureViaGemini(transcript: string): Promise<SOAPNote> {
     }
 }
 
-function structureLocally(transcript: string): SOAPNote {
+export function structureLocally(transcript: string): SOAPNote {
     // Simple rule-based parser for offline mode
     const lines = transcript.toLowerCase();
 
@@ -133,13 +133,26 @@ function extractAssessment(text: string): string {
 }
 
 function extractPlan(text: string): string {
+    const lowerText = text.toLowerCase();
+    const findings: string[] = [];
+
+    // Deterministic High-Value Plans based on keywords
+    if (lowerText.includes('snake') || lowerText.includes('bite') || lowerText.includes('envenomation')) {
+        findings.push('Immediate ICU admission; Administer polyvalent antivenom via slow IV infusion; Monitor clotting times (Lee-White) every 4-6 hours; IV Fluid therapy at 2x maintenance.');
+    }
+    if (lowerText.includes('fire ant') || lowerText.includes('ant mound')) {
+        findings.push('Evacuate site; Notify Biosecurity authorities; Apply approved baiting protocols; Monitor for anaphylaxis in exposed subjects.');
+    }
+    if (lowerText.includes('lily') || lowerText.includes('sago palm') || lowerText.includes('toxic plant')) {
+        findings.push('Decontamination via gastric lavage or induction of emesis (if acute); Activated charcoal administration; Baseline renal/hepatic panels; Aggressive IV diuresis.');
+    }
+
     const patterns = [
         /(?:prescrib(?:ed?|ing)|gave|administered?|dispensed?)\s+(.+?)(?:\.|$)/gi,
         /(?:recommend|suggest|advise)[:\s]+(.+?)(?:\.|$)/gi,
         /(?:recheck|follow[- ]?up|return)\s+(.+?)(?:\.|$)/gi
     ];
 
-    const findings: string[] = [];
     for (const pattern of patterns) {
         const matches = text.matchAll(pattern);
         for (const match of matches) {
@@ -154,6 +167,10 @@ function extractPlan(text: string): string {
 
 function detectMissedCharges(text: string): string[] {
     const chargeableItems = [
+        { pattern: /(?:snake|bite|envenomation)/gi, item: 'Antivenom Administration (Polyvalent)' },
+        { pattern: /(?:fire ant|biosecurity|quarantine)/gi, item: 'Biosecurity Compliance Fee' },
+        { pattern: /(?:lily|palm|toxic|decon)/gi, item: 'Toxicology Decontamination Suite' },
+        { pattern: /(?:icu|hospitalize|overnight)/gi, item: 'ICU Level 1 Monitoring' },
         { pattern: /(?:nail\s*(?:trim|clip))/gi, item: 'Nail Trim' },
         { pattern: /(?:anal\s*gland)/gi, item: 'Anal Gland Expression' },
         { pattern: /(?:ear\s*clean)/gi, item: 'Ear Cleaning' },

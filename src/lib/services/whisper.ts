@@ -1,7 +1,8 @@
 // Whisper Service using Transformers.js for local browser-based transcription
 import { pipeline } from '@xenova/transformers';
 
-let whisperPipeline = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let whisperPipeline: any = null;
 let isLoading = false;
 
 export async function loadWhisper() {
@@ -29,7 +30,7 @@ export async function loadWhisper() {
     }
 }
 
-export async function transcribeAudio(audioBlob) {
+export async function transcribeAudio(audioBlob: Blob): Promise<string> {
     const transcriber = await loadWhisper();
 
     // Convert blob to array buffer
@@ -53,6 +54,6 @@ export async function transcribeAudio(audioBlob) {
     return result.text;
 }
 
-export function isModelLoaded() {
+export function isModelLoaded(): boolean {
     return whisperPipeline !== null;
 }

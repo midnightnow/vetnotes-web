@@ -17,24 +17,27 @@
     const MAGIC_FINDS = [
         {
             name: "Red Imported Fire Ant",
-            icon: "🔥",
+            image: "/assets/icon_fire_ant_pro.png",
             credits: 500,
             suburb: "Smithfield",
             rarity: "LEGENDARY",
+            description: "Invasive super-colony scout detected.",
         },
         {
             name: "Lurking Drake (Croc)",
-            icon: "🐉",
+            image: "/assets/pet_dragon_pro.png",
             credits: 300,
             suburb: "Smithfield",
             rarity: "RARE",
+            description: "Apex predator entering residential zone.",
         },
         {
             name: "The Earth Scar",
-            icon: "💎",
+            image: "/assets/icon_gem_pro.png",
             credits: 250,
             suburb: "Smithfield",
             rarity: "UNCOMMON",
+            description: "Geological anomaly emitting faint radiation.",
         },
     ];
 
@@ -113,11 +116,23 @@
     <div class="camera-wrapper">
         <video bind:this={videoRef} autoplay playsinline class="viewfinder"
         ></video>
+        <div class="vignette"></div>
+        <div class="scan-lines"></div>
 
         {#if !result}
             <div class="overlay-magic" in:fade>
-                <div class="reticle"></div>
-                <div class="hint-text">POINT AT ANYTHING UNUSUAL</div>
+                <div class="reticle">
+                    <div class="corner tl"></div>
+                    <div class="corner tr"></div>
+                    <div class="corner bl"></div>
+                    <div class="corner br"></div>
+                    <div class="center-dot"></div>
+                </div>
+                <div class="hud-top">
+                    <div class="hud-badge">REC ●</div>
+                    <div class="hud-badge">SENTINEL MODE</div>
+                </div>
+                <div class="hint-text">SCANNING FOR BIO-THREATS</div>
             </div>
         {/if}
     </div>
@@ -132,31 +147,45 @@
             >
                 {#if isScanning}
                     <div class="dna-spin"></div>
-                    <span>IDENTIFYING...</span>
+                    <span>ANALYZING...</span>
                 {:else}
-                    <span class="icon">✨</span>
-                    <span>TAP TO PROTECT COUNTRY</span>
+                    <img
+                        src="/assets/icon_magic_pro.png"
+                        class="w-8 h-8 pixelated"
+                        alt="Magic"
+                    />
+                    <span>IDENTIFY TARGET</span>
                 {/if}
             </button>
         {:else}
             <div
-                class="reward-overlay"
+                class="reward-overlay glass-panel"
                 in:scale={{ duration: 400, start: 0.5 }}
             >
-                <div class="big-confetti">🎉</div>
                 <div class="reward-content">
-                    <span class="rarity">{result.rarity} DISCOVERY</span>
-                    <h2>{result.name} {result.icon}</h2>
+                    <span class="rarity {result.rarity.toLowerCase()}"
+                        >{result.rarity} DISCOVERY</span
+                    >
+                    <div class="reward-image-container">
+                        <div class="glow-bg"></div>
+                        <img
+                            src={result.image}
+                            alt={result.name}
+                            class="reward-image pixelated"
+                        />
+                    </div>
+                    <h2>{result.name}</h2>
+                    <p class="desc">{result.description}</p>
                     <div class="credits">+{result.credits} BIO-CREDITS</div>
                     <p class="tagline">You just protected {result.suburb}!</p>
                 </div>
 
                 <div class="action-grid">
                     <button class="share-btn" on:click={handleShare}
-                        >📸 SHARE TO TIKTOK</button
+                        >📸 SHARE REPORT</button
                     >
                     <button class="reset-btn" on:click={reset}
-                        >FIND ANOTHER!</button
+                        >CONTINUE PATROL</button
                     >
                 </div>
             </div>
@@ -186,6 +215,31 @@
         object-fit: cover;
     }
 
+    .vignette {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+            circle,
+            transparent 50%,
+            rgba(0, 0, 0, 0.8)
+        );
+        pointer-events: none;
+    }
+
+    .scan-lines {
+        position: absolute;
+        inset: 0;
+        background: repeating-linear-gradient(
+            0deg,
+            rgba(0, 0, 0, 0.1),
+            rgba(0, 0, 0, 0.1) 1px,
+            transparent 1px,
+            transparent 2px
+        );
+        pointer-events: none;
+        opacity: 0.5;
+    }
+
     .overlay-magic {
         position: absolute;
         inset: 0;
@@ -199,43 +253,99 @@
     .reticle {
         width: 250px;
         height: 250px;
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        border_radius: 40px;
         position: relative;
+        animation: breathe 3s infinite ease-in-out;
     }
 
-    .reticle::after {
-        content: "";
-        position: absolute;
-        inset: -10px;
-        border: 2px solid #fbbf24;
-        border_radius: 50px;
-        animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-        0% {
+    @keyframes breathe {
+        0%,
+        100% {
             transform: scale(1);
-            opacity: 0;
+            opacity: 0.8;
         }
         50% {
+            transform: scale(1.05);
             opacity: 0.5;
         }
-        100% {
-            transform: scale(1.1);
-            opacity: 0;
-        }
+    }
+
+    .corner {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #38bdf8;
+    }
+    .tl {
+        top: 0;
+        left: 0;
+        border-right: 0;
+        border-bottom: 0;
+    }
+    .tr {
+        top: 0;
+        right: 0;
+        border-left: 0;
+        border-bottom: 0;
+    }
+    .bl {
+        bottom: 0;
+        left: 0;
+        border-right: 0;
+        border-top: 0;
+    }
+    .br {
+        bottom: 0;
+        right: 0;
+        border-left: 0;
+        border-top: 0;
+    }
+
+    .center-dot {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 4px;
+        height: 4px;
+        background: #ef4444;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        box-shadow: 0 0 4px #ef4444;
+    }
+
+    .hud-top {
+        position: absolute;
+        top: 2rem;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: space-between;
+        padding: 0 2rem;
+    }
+
+    .hud-badge {
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.7rem;
+        font-weight: 800;
+        padding: 0.25rem 0.75rem;
+        border-radius: 4px;
+        letter-spacing: 0.1em;
+        backdrop-filter: blur(4px);
     }
 
     .hint-text {
         margin-top: 2rem;
-        background: rgba(0, 0, 0, 0.6);
+        background: rgba(15, 23, 42, 0.8);
+        color: #38bdf8;
         padding: 0.5rem 1.5rem;
-        border-radius: 50px;
+        border-radius: 4px;
         font-weight: 800;
         font-size: 0.8rem;
         letter-spacing: 0.1em;
         backdrop-filter: blur(10px);
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        text-transform: uppercase;
     }
 
     .ui-layer {
@@ -256,75 +366,127 @@
     }
 
     .magic-button {
-        background: linear-gradient(135deg, #fbbf24 0%, #f472b6 100%);
-        border: 4px solid white;
-        padding: 1.5rem 3rem;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 1rem 2rem;
         border-radius: 60px;
         color: white;
-        font-weight: 950;
-        font-size: 1.25rem;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        font-weight: 800;
+        font-size: 1.1rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
         cursor: pointer;
         display: flex;
         align-items: center;
         gap: 1rem;
         transition: transform 0.2s;
         text-transform: uppercase;
+        letter-spacing: 0.05em;
     }
 
     .magic-button:active {
-        transform: scale(0.9);
+        transform: scale(0.95);
     }
 
     .reward-overlay {
-        background: #111;
+        background: rgba(15, 23, 42, 0.95);
         width: 100%;
         max-width: 400px;
-        border-radius: 40px;
-        padding: 3rem 2rem;
+        border-radius: 32px;
+        padding: 2.5rem;
         text-align: center;
         border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 50px 100px rgba(0, 0, 0, 0.8);
+        box-shadow: 0 50px 100px rgba(0, 0, 0, 0.9);
+        backdrop-filter: blur(20px);
     }
 
-    .big-confetti {
-        font-size: 4rem;
-        margin-bottom: 1rem;
+    .reward-image-container {
+        position: relative;
+        width: 120px;
+        height: 120px;
+        margin: 1rem auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .glow-bg {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+            circle,
+            rgba(56, 189, 248, 0.4) 0%,
+            transparent 70%
+        );
+        filter: blur(20px);
+    }
+
+    .reward-image {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        position: relative;
+        z-index: 2;
+    }
+
+    .pixelated {
+        image-rendering: pixelated;
     }
 
     .rarity {
-        font-size: 0.7rem;
+        font-size: 0.65rem;
         font-weight: 900;
         letter-spacing: 0.2em;
-        color: #fbbf24;
-        background: rgba(251, 191, 36, 0.1);
         padding: 0.4rem 1rem;
-        border-radius: 50px;
+        border-radius: 4px;
         display: inline-block;
-        margin-bottom: 1rem;
+        margin-bottom: 0.5rem;
+        text-transform: uppercase;
+    }
+
+    .rarity.legendary {
+        background: rgba(239, 68, 68, 0.2);
+        color: #ef4444;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .rarity.rare {
+        background: rgba(59, 130, 246, 0.2);
+        color: #60a5fa;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+    .rarity.uncommon {
+        background: rgba(34, 197, 94, 0.2);
+        color: #4ade80;
+        border: 1px solid rgba(34, 197, 94, 0.3);
     }
 
     h2 {
-        font-size: 2rem;
-        font-weight: 950;
+        font-size: 1.5rem;
+        font-weight: 900;
         margin: 0;
         color: white;
     }
 
+    .desc {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.8rem;
+        margin-top: 0.5rem;
+    }
+
     .credits {
-        font-size: 2.5rem;
-        font-weight: 950;
+        font-size: 2rem;
+        font-weight: 800;
         margin: 1.5rem 0;
-        background: linear-gradient(to bottom, #fbbf24, #f59e0b);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: #38bdf8;
+        text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
     }
 
     .tagline {
-        opacity: 0.6;
-        font-size: 0.9rem;
-        margin-bottom: 2.5rem;
+        opacity: 0.4;
+        font-size: 0.75rem;
+        margin-bottom: 2rem;
         color: white;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
     }
 
     .action-grid {
@@ -334,30 +496,37 @@
     }
 
     .share-btn {
-        background: #fbbf24;
-        color: black;
+        background: #38bdf8;
+        color: #0f172a;
         border: none;
         padding: 1.25rem;
-        border-radius: 20px;
-        font-weight: 950;
-        font-size: 1.1rem;
+        border-radius: 16px;
+        font-weight: 800;
+        font-size: 0.9rem;
         cursor: pointer;
+        letter-spacing: 0.05em;
     }
 
     .reset-btn {
         background: transparent;
-        color: #666;
-        border: none;
-        font-weight: 800;
+        color: rgba(255, 255, 255, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        font-weight: 700;
         padding: 1rem;
+        border-radius: 16px;
         cursor: pointer;
+        font-size: 0.8rem;
+    }
+    .reset-btn:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: white;
     }
 
     .dna-spin {
-        width: 24px;
-        height: 24px;
-        border: 4px solid rgba(255, 255, 255, 0.3);
-        border-top: 4px solid white;
+        width: 20px;
+        height: 20px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top: 2px solid white;
         border-radius: 50%;
         animation: spin 1s linear infinite;
     }

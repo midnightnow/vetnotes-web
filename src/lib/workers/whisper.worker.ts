@@ -7,9 +7,15 @@ env.useBrowserCache = true;
 // Ensure no auth token is accidentally sent for public models
 // env.useAuthToken = false; // Not a standard property but good to keep in mind if using custom fetch
 
-let transcriber = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let transcriber: any = null;
 
-self.addEventListener('message', async (event) => {
+interface WorkerMessage {
+    type: 'load' | 'transcribe';
+    audio?: Float32Array;
+}
+
+self.addEventListener('message', async (event: MessageEvent<WorkerMessage>) => {
     const message = event.data;
 
     if (message.type === 'load') {
@@ -17,8 +23,9 @@ self.addEventListener('message', async (event) => {
             // Using whisper-tiny.en for maximum MVP reliability and speed
             transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
             self.postMessage({ status: 'ready' });
-        } catch (error) {
-            self.postMessage({ status: 'error', error: error.message });
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            self.postMessage({ status: 'error', error: errorMessage });
         }
     }
 
@@ -38,8 +45,9 @@ self.addEventListener('message', async (event) => {
                 status: 'complete',
                 text: output.text || output[0]?.text
             });
-        } catch (error) {
-            self.postMessage({ status: 'error', error: error.message });
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            self.postMessage({ status: 'error', error: errorMessage });
         }
     }
 });

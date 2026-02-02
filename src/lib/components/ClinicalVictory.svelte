@@ -14,7 +14,6 @@
     };
     export let lensMode: "cozy" | "adventure" | "tactical" = "cozy";
 
-    let canvasRef: HTMLCanvasElement;
     let isSaving = false;
 
     onMount(() => {
@@ -29,9 +28,6 @@
 
     async function downloadPoster() {
         isSaving = true;
-        // In a real implementation, we'd use html2canvas or a similar library
-        // to render the current DOM node to a high-res JPG.
-        // For this demo, we'll simulate a 1s render delay.
         setTimeout(() => {
             isSaving = false;
             alert(
@@ -47,8 +43,7 @@
 
 <div class="victory-overlay" transition:fade>
     <div
-        class="victory-card"
-        class:tactical={lensMode === "tactical"}
+        class="victory-card glass-panel"
         in:scale={{ duration: 500, start: 0.8 }}
     >
         <div class="card-inner">
@@ -67,7 +62,29 @@
             <div class="photo-frame">
                 <div class="photo-border">
                     {#if pet.image}
-                        <img src={pet.image} alt={pet.name} class="pet-photo" />
+                        <img
+                            src={pet.image}
+                            alt={pet.name}
+                            class="pet-photo pixelated"
+                        />
+                    {:else if pet.species === "Dog"}
+                        <img
+                            src="/assets/pet_dog_pro.png"
+                            alt="Dog"
+                            class="pet-photo pixelated"
+                        />
+                    {:else if pet.species === "Dragon"}
+                        <img
+                            src="/assets/pet_dragon_pro.png"
+                            alt="Dragon"
+                            class="pet-photo pixelated"
+                        />
+                    {:else if pet.species === "Bird"}
+                        <img
+                            src="/assets/pet_bird_pro.png"
+                            alt="Bird"
+                            class="pet-photo pixelated"
+                        />
                     {:else}
                         <div class="pet-placeholder">
                             <span class="icon">🐾</span>
@@ -95,7 +112,14 @@
                     <span class="lab">Trust Meter</span>
                 </div>
                 <div class="stat-box">
-                    <span class="val">💖 Happy</span>
+                    <div class="flex items-center gap-2 justify-center">
+                        <img
+                            src="/assets/icon_heart.png"
+                            class="w-6 h-6"
+                            alt="Heart"
+                        />
+                        <span class="val">Happy</span>
+                    </div>
                     <span class="lab">Final Mood</span>
                 </div>
                 <div class="stat-box">
@@ -124,7 +148,7 @@
     .victory-overlay {
         position: fixed;
         inset: 0;
-        background: rgba(15, 23, 42, 0.9);
+        background: rgba(15, 23, 42, 0.95);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -136,18 +160,13 @@
     .victory-card {
         width: 100%;
         max-width: 500px;
-        background: white;
+        background: #1e293b;
         border-radius: 32px;
         overflow: hidden;
         position: relative;
-        box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.5);
-        color: #1e293b;
-    }
-
-    .victory-card.tactical {
-        background: #0f172a;
-        color: #38bdf8;
-        border: 2px solid #38bdf8;
+        box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.8);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .card-inner {
@@ -182,8 +201,8 @@
 
     .badge {
         display: inline-block;
-        background: #fdf2f8;
-        color: #db2777;
+        background: rgba(56, 189, 248, 0.15);
+        color: #38bdf8;
         padding: 0.5rem 1rem;
         border-radius: 50px;
         font-size: 0.75rem;
@@ -191,11 +210,7 @@
         letter-spacing: 0.1em;
         margin-bottom: 1rem;
         text-transform: uppercase;
-    }
-
-    .tactical .badge {
-        background: rgba(56, 189, 248, 0.1);
-        color: #38bdf8;
+        border: 1px solid rgba(56, 189, 248, 0.2);
     }
 
     h1 {
@@ -203,6 +218,7 @@
         font-size: 2rem;
         font-weight: 800;
         line-height: 1.2;
+        color: white;
     }
 
     .subtitle {
@@ -210,25 +226,23 @@
         font-size: 0.85rem;
         opacity: 0.6;
         font-family: monospace;
+        color: rgba(255, 255, 255, 0.6);
     }
 
     .photo-frame {
         width: 100%;
         padding: 1rem;
-        background: #f8fafc;
+        background: rgba(255, 255, 255, 0.03);
         border-radius: 24px;
         margin-bottom: 2rem;
-        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
-    }
-
-    .tactical .photo-frame {
-        background: #1e293b;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .photo-border {
         position: relative;
         aspect-ratio: 4/3;
-        background: #cbd5e1;
+        background: #0f172a;
         border-radius: 16px;
         overflow: hidden;
     }
@@ -236,7 +250,12 @@
     .pet-photo {
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: contain;
+        background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
+    }
+
+    .pixelated {
+        image-rendering: pixelated;
     }
 
     .pet-placeholder {
@@ -246,19 +265,8 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        background: linear-gradient(135deg, #e2e8f0, #cbd5e1);
+        background: linear-gradient(135deg, #1e293b, #0f172a);
         color: #64748b;
-    }
-
-    .pet-placeholder .icon {
-        font-size: 4rem;
-        margin-bottom: 1rem;
-        filter: saturate(0.5);
-    }
-    .pet-placeholder .label {
-        font-size: 0.9rem;
-        font-weight: 600;
-        text-transform: uppercase;
     }
 
     .photo-overlay {
@@ -267,17 +275,16 @@
         left: 0;
         right: 0;
         padding: 1rem;
-        background: linear-gradient(transparent, rgba(0, 0, 0, 0.4));
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
         text-align: right;
     }
 
     .watermark {
-        color: white;
+        color: rgba(255, 255, 255, 0.8);
         font-size: 0.6rem;
         font-weight: 700;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
-        opacity: 0.8;
     }
 
     .story-section {
@@ -289,7 +296,8 @@
         font-weight: 700;
         text-transform: uppercase;
         margin-bottom: 0.5rem;
-        opacity: 0.5;
+        opacity: 0.6;
+        color: #94a3b8;
     }
 
     .story-section p {
@@ -297,6 +305,7 @@
         font-style: italic;
         line-height: 1.6;
         margin: 0;
+        color: white;
     }
 
     .stats-grid {
@@ -308,31 +317,27 @@
     }
 
     .stat-box {
-        background: #f1f5f9;
+        background: rgba(255, 255, 255, 0.03);
         padding: 1rem 0.5rem;
         border-radius: 16px;
         display: flex;
         flex-direction: column;
         gap: 0.25rem;
-    }
-
-    .tactical .stat-box {
-        background: #1e293b;
+        border: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .stat-box .val {
         font-weight: 800;
         font-size: 1.1rem;
-        color: #1e293b;
-    }
-    .tactical .stat-box .val {
         color: #38bdf8;
     }
+
     .stat-box .lab {
         font-size: 0.65rem;
         font-weight: 700;
         text-transform: uppercase;
         opacity: 0.5;
+        color: rgba(255, 255, 255, 0.6);
     }
 
     .victory-footer {
@@ -370,10 +375,16 @@
         width: 100%;
         padding: 1rem;
         background: transparent;
-        color: #64748b;
-        border: none;
+        color: rgba(255, 255, 255, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
         font-weight: 600;
         cursor: pointer;
+        transition: all 0.2s;
+    }
+    .close-btn:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: white;
     }
 
     .spinner {

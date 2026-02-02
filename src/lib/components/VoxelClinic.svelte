@@ -53,7 +53,7 @@
 
                     // Simple peak detection for volume
                     dataArray = new Uint8Array(analyser.frequencyBinCount);
-                    analyser.getByteFrequencyData(dataArray);
+                    analyser.getByteFrequencyData(dataArray as any);
                     const average =
                         dataArray.reduce((p, c) => p + c, 0) / dataArray.length;
                     volume = average / 128; // Normalize
@@ -104,7 +104,7 @@
 </script>
 
 <div class="clinic-overlay" transition:fade>
-    <div class="clinic-room" in:fly={{ y: 50 }}>
+    <div class="clinic-room glass-panel" in:fly={{ y: 50 }}>
         <header>
             <div class="clinic-status">
                 <span class="loc">📍 EDMONTON NEIGHBORHOOD CLINIC</span>
@@ -118,18 +118,32 @@
                 <div class="mood-bubble" class:visible={feedbackText}>
                     {feedbackText}
                 </div>
-                <!-- Cute emoji representation for now -->
+                <!-- High-fidelity pixel art representation -->
                 <div
-                    class="pet-avatar"
+                    class="pet-avatar-wrapper"
                     class:anxious={pet.temperament === "anxious"}
                     class:grumpy={pet.temperament === "grumpy"}
                 >
                     {#if pet.species === "Dog"}
-                        🐕
-                    {:else if pet.species === "Cat"}
-                        🐈
+                        <img
+                            src="/assets/pet_dog_pro.png"
+                            alt="Dog"
+                            class="pet-img"
+                        />
+                    {:else if pet.species === "Dragon"}
+                        <img
+                            src="/assets/pet_dragon_pro.png"
+                            alt="Dragon"
+                            class="pet-img"
+                        />
+                    {:else if pet.species === "Bird"}
+                        <img
+                            src="/assets/pet_bird_pro.png"
+                            alt="Bird"
+                            class="pet-img"
+                        />
                     {:else}
-                        🐾
+                        <div class="emoji-fallback">🐾</div>
                     {/if}
                 </div>
                 <div class="pet-shadow"></div>
@@ -144,7 +158,7 @@
             </div>
         </div>
 
-        <div class="interaction-zone">
+        <div class="interaction-zone glass-panel">
             <div class="trust-meter">
                 <div class="meter-label">
                     <span>AIVA TRUST METER</span>
@@ -157,6 +171,12 @@
                         class:critical={pet.trustLevel < 30}
                         class:success={pet.trustLevel > 80}
                     ></div>
+                </div>
+                <div
+                    class="flex justify-between mt-1 text-[9px] font-mono text-white/30 uppercase"
+                >
+                    <span>Distrust</span>
+                    <span>Rapport</span>
                 </div>
             </div>
 
@@ -208,7 +228,7 @@
 
     {#if showVictory}
         <div class="success-pop" transition:scale>
-            <div class="card">
+            <div class="card glass-panel">
                 <h2>CLINIC SUCCESS!</h2>
                 <p>
                     {pet.name} is feeling much better thanks to your AIVA empathy.
@@ -231,7 +251,7 @@
     .clinic-overlay {
         position: fixed;
         inset: 0;
-        background: rgba(15, 23, 42, 0.95);
+        background: rgba(0, 0, 0, 0.9);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -240,16 +260,22 @@
         padding: 1rem;
     }
 
+    .glass-panel {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+    }
+
     .clinic-room {
         width: 100%;
         max-width: 500px;
-        background: white;
         border-radius: 40px;
         overflow: hidden;
-        color: #1e293b;
+        color: white;
         display: flex;
         flex-direction: column;
-        box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.8);
     }
 
     header {
@@ -257,27 +283,27 @@
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        background: #f8fafc;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .loc {
         font-size: 0.65rem;
         font-weight: 800;
-        color: #64748b;
+        color: rgba(255, 255, 255, 0.4);
         letter-spacing: 0.1em;
     }
     h2 {
         margin: 0.25rem 0 0 0;
         font-size: 1.5rem;
         font-weight: 900;
-        color: #0f172a;
+        color: white;
     }
 
     .close-btn {
         background: none;
         border: none;
         font-size: 1.5rem;
-        color: #94a3b8;
+        color: rgba(255, 255, 255, 0.4);
         cursor: pointer;
     }
 
@@ -298,18 +324,34 @@
         justify-content: center;
     }
 
-    .pet-avatar {
-        font-size: 8rem;
-        position: relative;
+    .pet-avatar-wrapper {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         z-index: 2;
         transition: transform 0.2s;
     }
 
-    .pet-avatar.anxious {
+    .pet-img {
+        width: 180px;
+        height: 180px;
+        object-fit: contain;
+        image-rendering: pixelated;
+        filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.5));
+    }
+
+    .pet-avatar-wrapper.anxious {
         animation: shimmer 0.2s infinite;
     }
-    .pet-avatar.grumpy {
-        transform: rotate(-10deg);
+
+    .pet-avatar-wrapper.grumpy {
+        transform: rotate(-5deg);
+    }
+
+    .emoji-fallback {
+        font-size: 8rem;
     }
 
     @keyframes shimmer {
@@ -329,8 +371,9 @@
         bottom: 20px;
         width: 120px;
         height: 20px;
-        background: rgba(0, 0, 0, 0.05);
+        background: rgba(0, 0, 0, 0.4);
         border-radius: 50%;
+        filter: blur(10px);
     }
 
     .mood-bubble {
@@ -347,7 +390,8 @@
         transform: translateY(10px);
         transition: all 0.2s;
         z-index: 10;
-        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .mood-bubble.visible {
@@ -368,10 +412,11 @@
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
-        background: #f1f5f9;
+        background: rgba(255, 255, 255, 0.1);
         padding: 0.4rem 0.8rem;
         border-radius: 50px;
         margin-top: 0.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.05);
     }
     .temp-badge .icon {
         font-size: 0.8rem;
@@ -379,16 +424,16 @@
     .temp-badge .val {
         font-size: 0.65rem;
         font-weight: 800;
-        color: #64748b;
+        color: rgba(255, 255, 255, 0.6);
     }
 
     .interaction-zone {
         padding: 2rem;
-        background: #f8fafc;
         border-radius: 40px 40px 0 0;
         display: flex;
         flex-direction: column;
         gap: 2rem;
+        margin-top: auto;
     }
 
     .trust-meter {
@@ -404,29 +449,34 @@
     .meter-label span {
         font-size: 0.7rem;
         font-weight: 800;
-        color: #64748b;
+        color: rgba(255, 255, 255, 0.6);
     }
     .meter-label strong {
         font-size: 1.2rem;
         font-weight: 900;
+        color: white;
     }
 
     .meter-track {
         height: 12px;
-        background: #e2e8f0;
+        background: rgba(0, 0, 0, 0.3);
         border-radius: 10px;
         overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.05);
     }
     .meter-fill {
         height: 100%;
         background: #38bdf8;
         transition: width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
     }
     .meter-fill.success {
         background: #10b981;
+        box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
     }
     .meter-fill.critical {
         background: #ef4444;
+        box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
     }
 
     .voice-controls {
@@ -438,8 +488,8 @@
 
     .mic-btn {
         width: 100%;
-        background: white;
-        border: 2px solid #e2e8f0;
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px solid rgba(255, 255, 255, 0.1);
         padding: 1.5rem;
         border-radius: 24px;
         display: flex;
@@ -449,11 +499,13 @@
         cursor: pointer;
         transition: all 0.2s;
         position: relative;
+        color: white;
     }
 
     .mic-btn.active {
         border-color: #38bdf8;
-        background: #f0f9ff;
+        background: rgba(56, 189, 248, 0.1);
+        box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
     }
     .mic-icon {
         font-size: 2rem;
@@ -461,7 +513,7 @@
     .mic-btn span {
         font-size: 0.9rem;
         font-weight: 800;
-        color: #0f172a;
+        color: white;
     }
 
     .audio-waves {
@@ -478,7 +530,7 @@
 
     .hint {
         font-size: 0.8rem;
-        color: #94a3b8;
+        color: rgba(255, 255, 255, 0.4);
         font-weight: 500;
     }
 
@@ -489,8 +541,8 @@
     .finish-btn {
         width: 100%;
         padding: 1.5rem;
-        background: #0f172a;
-        color: white;
+        background: #38bdf8;
+        color: #0f172a;
         border: none;
         border-radius: 20px;
         font-weight: 800;
@@ -499,14 +551,15 @@
         transition: opacity 0.2s;
     }
     .finish-btn:disabled {
-        opacity: 0.3;
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.2);
         cursor: not-allowed;
     }
 
     .success-pop {
         position: absolute;
         inset: 0;
-        background: rgba(16, 185, 129, 0.95);
+        background: rgba(16, 185, 129, 0.9);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -515,10 +568,11 @@
     }
 
     .success-pop .card {
-        background: white;
+        background: #1e293b;
         padding: 3rem 2rem;
         border-radius: 32px;
         text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .rewards {
@@ -535,7 +589,7 @@
     .rew span {
         font-size: 0.6rem;
         font-weight: 800;
-        color: #64748b;
+        color: rgba(255, 255, 255, 0.5);
     }
     .rew strong {
         font-size: 1.5rem;

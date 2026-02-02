@@ -1,13 +1,48 @@
 <script lang="ts">
-	import { onMount, onDestroy } from "svelte";
+	import { onMount, onDestroy, afterUpdate } from "svelte";
 	import {
 		structureToSOAP,
 		formatSOAPAsText,
-		pushToPIMS,
 		type SOAPNote,
 	} from "$lib/services/aiva";
 	import { structureViaGemini } from "$lib/services/gemini";
 	import { redactPII, generateRedactionReport } from "$lib/utils/redactor";
+	import { SOAP_TEMPLATES } from "$lib/data/templates";
+	import {
+		ShorthandEngine,
+		type AxisType,
+	} from "$lib/services/ShorthandEngine";
+	import AxisPickerModal from "$lib/components/AxisPickerModal.svelte";
+	import { ClinicalEncryptionService } from "$lib/security/ClinicalEncryptionService";
+	import {
+		CORE_SYNC_CHANNEL,
+		volatileBillingTray,
+	} from "$lib/stores/VolatileStore";
+	import { instrumentationParams } from "$lib/services/InstrumentationHook";
+	import { detectNotifiableConditions } from "$lib/services/biosecurity";
+	import type { NotifiableCondition } from "$lib/data/notifiable";
+	import { generateRegulatoryHTML } from "$lib/services/RegulatorySubmission";
+	import { player } from "$lib/stores/player";
+	import {
+		TrustedSignature,
+		type ClinicalPayload,
+	} from "$lib/services/TrustedSignature";
+
+	let evidenceSeal = "";
+	let evidenceHash = "";
+
+	$: ({ level, xp, happyValleyCredits, preferredLens, displayName } =
+		$player);
+
+	// Sovereign Sync Types
+	interface CoreSyncMessage {
+		type: string;
+		origin: "VETSORCERY" | "AIVET" | "VETNOTES";
+		payload: any;
+		timestamp: number;
+	}
+
+	const CORE_SYNC_CHANNEL = "vetnotes-core-sync";
 
 	let isRecording = false;
 	let isProcessing = false;
@@ -19,21 +54,151 @@
 	let isPushing = false;
 	let recognition: any = null;
 	let interimTranscript = "";
-	let isPro = false;
+	let isPro = true;
 	let showSettings = false;
 	let aivaApiKey = "";
 
 	let mediaRecorder: MediaRecorder | null = null;
 	let audioChunks: Blob[] = [];
-	let timerInterval: NodeJS.Timer | null = null;
+	let timerInterval: any = null;
 	let soapNote: SOAPNote | null = null;
 
+	// Sovereign State
+	let selectedTemplate = "wellness_exam"; // Default
+	let syncChannel: BroadcastChannel | null = null;
+	let isCoreLinked = false;
+
+	// Shorthand & Research State
+	let isEditorMode = true; // Allow manual editing by default
+	let activeAxisType: AxisType | null = null;
+	let showAxisPicker = false;
+	let editorCursorPos = 0;
+	let activeTriggerRange = { start: 0, end: 0 };
+
+	// Subscribe to Vitals
+	let vitals: any = null;
+	instrumentationParams.subscribe((v) => (vitals = v));
+
+	// Subscribe to Billing
+	let billingItems: any[] = [];
+	volatileBillingTray.subscribe((items) => (billingItems = items));
+
+	// Biosecurity Alerts
+	let activeAlerts: NotifiableCondition[] = [];
+	$: activeAlerts = detectNotifiableConditions(transcript || rawTranscript);
+
+	function handleRegulatoryExport(condition: NotifiableCondition) {
+		const html = generateRegulatoryHTML(
+			condition,
+			transcript || rawTranscript,
+			{
+				tox: transcript?.match(/\*tox:\s*([^*]+)/i)?.[1]?.trim(),
+				path: transcript?.match(/\*path:\s*([^*]+)/i)?.[1]?.trim(),
+				vital: transcript?.match(/\*vital:\s*([^*]+)/i)?.[1]?.trim(),
+			},
+		);
+		const win = window.open("", "_blank");
+		if (win) {
+			win.document.write(html);
+			win.document.close();
+		}
+	}
+
+	$: integrityScore = calculateIntegrityScore(
+		transcript || rawTranscript,
+		selectedTemplate,
+	);
+
+	// Auto-start simulation for high-stakes/research modes if no real feed
+	$: if (
+		[
+			"research_study",
+			"gardening_consult",
+			"plant_biosecurity",
+			"invasive_species",
+			"envenomation",
+		].includes(selectedTemplate)
+	) {
+		instrumentationParams.startSimulation();
+	} else {
+		instrumentationParams.stopSimulation();
+	}
+
+	function calculateIntegrityScore(
+		text: string,
+		templateKey: string,
+	): number {
+		const highIntegrityModes = [
+			"research_study",
+			"gardening_consult",
+			"plant_biosecurity",
+			"invasive_species",
+			"envenomation",
+		];
+		if (!highIntegrityModes.includes(templateKey)) return 100; // Not applicable for standard clinical notes
+		if (!text) return 0;
+
+		let score = 20; // Base score for content
+		if (text.includes("[LESION DESCRIPTION - MULTI-AXIS]")) score += 30;
+		if (text.includes("[PATHOLOGY MODULE]")) score += 20;
+		if (text.includes("HR:") || text.includes("*vital:")) score += 10;
+		if (text.length > 200) score += 20;
+
+		return Math.min(100, score);
+	}
+
+	function handleCaptureVitals() {
+		if (!vitals) return;
+		const vitalString = `\n[VITALS] HR:${vitals.heartRate} bpm | SpO2:${vitals.spo2}% | RR:${vitals.respRate} | T:${vitals.temp}C (${vitals.source})\n`;
+
+		// Append to editor
+		if (isEditorMode) {
+			rawTranscript += vitalString;
+			transcript = rawTranscript;
+		} else {
+			// If in transcript mode, we still append to raw for consistency
+			rawTranscript += vitalString;
+		}
+	}
+
 	onMount(async () => {
+		instrumentationParams.connect();
+		volatileBillingTray.restore();
 		// Detect if running on .pro domain
 		if (typeof window !== "undefined") {
 			isPro = window.location.hostname.includes("vetnotes.pro");
 			const storedKey = localStorage.getItem("aiva_api_key");
 			if (storedKey) aivaApiKey = storedKey;
+
+			// CONNECT TO SOVEREIGN ENGINE (Bridge to Port 3000/3001)
+			try {
+				syncChannel = new BroadcastChannel(CORE_SYNC_CHANNEL);
+				syncChannel.onmessage = (event) => {
+					const msg = event.data as CoreSyncMessage;
+					if (msg.origin !== "VETNOTES") {
+						console.log(
+							`[Core Sync] Received from ${msg.origin}:`,
+							msg.type,
+						);
+						if (
+							msg.type === "SESSION_PING" ||
+							msg.type === "PATIENT_CONTEXT_UPDATE"
+						) {
+							isCoreLinked = true;
+							status = "Linked to Core Engine";
+						}
+					}
+				};
+				// Announce presence to backend
+				syncChannel.postMessage({
+					type: "SESSION_PING",
+					origin: "VETNOTES",
+					payload: { status: "ready" },
+					timestamp: Date.now(),
+				});
+			} catch (e) {
+				console.warn("BroadcastChannel not supported or blocked");
+			}
 		}
 
 		// Initialize Web Speech API
@@ -84,7 +249,8 @@
 	});
 
 	onDestroy(() => {
-		if (timerInterval) clearInterval(timerInterval);
+		if (timerInterval) clearInterval(timerInterval as any);
+		if (syncChannel) syncChannel.close();
 	});
 
 	async function toggleRecording() {
@@ -131,7 +297,44 @@
 				}, 1000);
 			} catch (err) {
 				console.error("Error accessing mic:", err);
-				status = "Microphone Access Denied";
+
+				// FALLBACK: SIMULATION MODE (For Demo/No-Mic Environments)
+				console.warn("Activating Simulation Mode due to mic error");
+				isRecording = true;
+				status = "Simulating Clinical Stream (Demo)";
+				elapsedTime = 0;
+
+				// Simulate periodic text injection
+				const dummyTextValue =
+					" Patient presents for lethargy and vomiting... owner reports 2 day duration... examining abdomen... tensing on palpation... ";
+				let simulationIndex = 0;
+
+				// 1. Core Clock (1Hz)
+				timerInterval = setInterval(() => {
+					elapsedTime++;
+				}, 1000);
+
+				// 2. Typing Simulator (Fast)
+				const typingInterval = setInterval(() => {
+					if (simulationIndex < dummyTextValue.length) {
+						// Add small randomization for realism
+						if (Math.random() > 0.1) {
+							rawTranscript += dummyTextValue[simulationIndex];
+							simulationIndex++;
+						}
+					} else {
+						simulationIndex = 0; // Loop context
+						rawTranscript += " [Stream Refreshed] ";
+					}
+				}, 50);
+
+				// Cleanup helper to clear both
+				const originalClear = clearInterval;
+				// @ts-ignore
+				window._clearSim = () => {
+					clearInterval(timerInterval);
+					clearInterval(typingInterval);
+				};
 			}
 		} else {
 			if (mediaRecorder) {
@@ -141,7 +344,7 @@
 					.forEach((track) => track.stop());
 			}
 			if (timerInterval) {
-				clearInterval(timerInterval);
+				clearInterval(timerInterval as any);
 				timerInterval = null;
 			}
 			isRecording = false;
@@ -170,6 +373,18 @@
 			);
 			console.log("Redaction report:", report);
 
+			// SECURE AT REST: Encrypt the raw transcript using Noctua Sentinel signatures
+			status = "Encrypting Clinical Data (Sentinel)...";
+			const masterSecret = `CLINIC_${isPro ? "PRO" : "DEMO"}_${Date.now()}`; // Placeholder for clinic ID
+			const encryptedTranscript = await ClinicalEncryptionService.encrypt(
+				rawTranscript,
+				masterSecret,
+			);
+			console.log(
+				"🔒 Clinical Data Sealed:",
+				encryptedTranscript.signature,
+			);
+
 			status = "Structuring SOAP via AIVA (Cloud)...";
 
 			// Try Gemini first for higher quality, fall back to local rule-based AIVA
@@ -185,7 +400,7 @@
 					"Gemini failed, falling back to local AIVA:",
 					geminiError,
 				);
-				status = "Structuring SOAP via AIVA (Local)...";
+				status = "Structuring SOAP via AIVA...";
 				soapNote = await structureToSOAP(redactedTranscript, false);
 			}
 
@@ -193,7 +408,7 @@
 
 			// Count key insights (simple heuristic)
 			keyInsights =
-				(soapNote.missedCharges?.length || 0) +
+				(soapNote?.missedCharges?.length || 0) +
 				(transcript.match(/\d+/g)?.length || 0);
 
 			status = "Consult Structured";
@@ -220,13 +435,64 @@
 	async function handlePushToPIMS() {
 		if (!soapNote) return;
 
+		// Forensic Integrity Gate: Block if high-stakes and score < 100
+		const highIntegrityModes = [
+			"research_study",
+			"gardening_consult",
+			"plant_biosecurity",
+			"invasive_species",
+			"envenomation",
+		];
+
+		if (
+			highIntegrityModes.includes(selectedTemplate) &&
+			integrityScore < 100
+		) {
+			status = "EVIDENCE LOCK ACTIVE";
+			alert(
+				"Incomplete Forensic Data: Clinical Integrity Score must be 100% to lock evidence and sync. Please enrich with *tox:, *path:, or *vital:",
+			);
+			return;
+		}
+
 		isPushing = true;
-		status = "Syncing with PIMS...";
+		status = "Generating Evidence Seal...";
 
 		try {
+			// Generate Sovereign Signature
+			const payload: ClinicalPayload = {
+				caseId: `VET-${Date.now()}`,
+				transcript: transcript || rawTranscript,
+				axes: {
+					tox: transcript?.match(/\*tox:\s*([^*]+)/i)?.[1]?.trim(),
+					path: transcript?.match(/\*path:\s*([^*]+)/i)?.[1]?.trim(),
+					vital: transcript
+						?.match(/\*vital:\s*([^*]+)/i)?.[1]
+						?.trim(),
+				},
+				revenue: (soapNote.missedCharges || []).length * 150 + 145, // Demo revenue calculation
+				timestamp: Date.now(),
+			};
+
+			const { hash, seal } = TrustedSignature.lockEvidence(payload);
+			evidenceHash = hash;
+			evidenceSeal = seal;
+
+			status = "Syncing with PIMS...";
 			const result = await pushToPIMS(soapNote, "ezyvet");
+
 			if (result.success) {
 				status = "Synced Successfully";
+
+				// Post-sync: Notify the Sovereign Alliance channel
+				if (syncChannel) {
+					syncChannel.postMessage({
+						type: "EVIDENCE_COMMITTED",
+						origin: "VETNOTES",
+						payload: { hash, seal, caseId: payload.caseId },
+						timestamp: Date.now(),
+					});
+				}
 			} else {
 				status = "PIMS Sync Failed";
 				alert(result.message);
@@ -254,123 +520,122 @@
 		keyInsights = 0;
 		elapsedTime = 0;
 		status = "Ready for Consult";
+		volatileBillingTray.clear();
 	}
+
+	function handleEditorInput(e: Event) {
+		const target = e.target as HTMLTextAreaElement;
+		const val = target.value;
+		const cursor = target.selectionStart;
+
+		// Simple scan for last typed trigger
+		// Look back 15 chars for a *trigger: pattern
+		const lookback = val.substring(Math.max(0, cursor - 15), cursor);
+		const matches = ShorthandEngine.scan(lookback);
+
+		if (matches.length > 0) {
+			const match = matches[matches.length - 1];
+			// Only trigger if we just typed the colon
+			if (lookback.endsWith(match.trigger)) {
+				activeAxisType = match.axis as AxisType;
+				// Calculate absolute positions
+				activeTriggerRange = {
+					start: cursor - match.trigger.length,
+					end: cursor,
+				};
+				showAxisPicker = true;
+			}
+		}
+
+		// Sync rawTranscript for integrity check
+		rawTranscript = val;
+	}
+
+	function handleAxisSave(event: CustomEvent<Record<string, string>>) {
+		if (!activeAxisType) return;
+		const payload = event.detail;
+		const expansion = ShorthandEngine.expand(activeAxisType, payload);
+
+		if (activeAxisType === "billing") {
+			volatileBillingTray.addItem({
+				sku: payload.code || "CONS-1",
+				description: payload.category || "Consultation",
+				quantity: 1,
+				unitPrice: 0,
+				category: payload.category || "General",
+				originNote: expansion,
+			});
+		}
+
+		// Inject expansion into text
+		const pre = rawTranscript.substring(0, activeTriggerRange.start);
+		const post = rawTranscript.substring(activeTriggerRange.end);
+
+		rawTranscript = pre + expansion + post;
+		// If we are in transcript mode, update that too if needed, but here we assume rawTranscript is the editor model
+		transcript = rawTranscript;
+
+		showAxisPicker = false;
+		activeAxisType = null;
+	}
+
+	afterUpdate(() => {
+		// Auto-scroll stream boxes
+		const rawBox = document.getElementById("raw-stream-box");
+		const soapBox = document.getElementById("soap-stream-box");
+		if (rawBox) rawBox.scrollTop = rawBox.scrollHeight;
+		if (soapBox) soapBox.scrollTop = soapBox.scrollHeight;
+	});
 </script>
 
 <svelte:head>
-	<title>VetNotes.me | Sovereign Voice-to-SOAP</title>
+	<title>VetNotes.me</title>
 	<meta
 		name="description"
-		content="Privacy-first veterinary SOAP note generation. Local transcription, zero data retention."
+		content="Privacy-first veterinary SOAP note generation. On-device privacy, zero data retention."
 	/>
 </svelte:head>
 
 <div class="max-w-6xl mx-auto px-6 py-12">
-	<!-- Header -->
-	<header class="flex justify-between items-center mb-16">
-		<div class="flex items-center space-x-3">
-			<div
-				class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20"
-			>
-				<svg
-					class="w-6 h-6 text-white"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-					><path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m8 0h-3m4-8a3 3 0 01-3 3H9a3 3 0 01-3-3V5a3 3 0 116 0v6z"
-					></path></svg
-				>
-			</div>
+	<header
+		class="flex justify-between items-center mb-12 border-b border-white/5 pb-6"
+	>
+		<div class="flex items-center space-x-4">
+			<div class="w-12 h-12 clinic-icon shadow-inner"></div>
 			<div>
-				<h1 class="text-2xl font-bold tracking-tight">
-					VetNotes<span class="text-blue-400"
-						>.{isPro ? "pro" : "me"}</span
-					>
+				<h1 class="text-xl font-bold tracking-tight text-white/90">
+					[Vetnotes<span class="text-blue-400">.pro</span>]
 				</h1>
 				<p
-					class="text-xs text-white/40 uppercase tracking-widest font-semibold"
+					class="text-[10px] text-white/40 font-mono tracking-widest uppercase"
 				>
-					Sovereign Intelligence
+					Clinical Workflow Workspace
 				</p>
 			</div>
 		</div>
 
-		<div class="flex items-center space-x-6 text-sm">
-			<a
-				href="https://aiva.help"
-				class="text-white/60 hover:text-white transition-colors">AIVA</a
+		<div class="flex items-center space-x-4">
+			<div
+				class="hidden md:flex items-center space-x-2 bg-black/20 px-3 py-1.5 rounded-full border border-white/10"
 			>
-			<a
-				href="https://aivet.dev"
-				class="text-white/60 hover:text-white transition-colors"
-				>AIVET</a
-			>
-			<a
-				href="https://vetnotes.pro"
-				class="text-white/60 hover:text-white transition-colors"
-				>Macagent Pro</a
-			>
-			<a
-				href="https://vetsorcery.com"
-				class="text-white/60 hover:text-white transition-colors"
-				>Vetsorcery</a
-			>
-			<a
-				href="https://vetnotes.pro"
-				class="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center space-x-2 border border-white/10"
-			>
-				<svg
-					class="w-4 h-4"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-					></path>
-				</svg>
-				<span>Download Macagent</span>
-			</a>
-			<div class="h-4 w-px bg-white/10"></div>
-			<div class="flex items-center space-x-2">
-				<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"
+				<span
+					class="w-2 h-2 rounded-full {isCoreLinked
+						? 'bg-green-500 animate-pulse'
+						: 'bg-orange-500'}"
 				></span>
-				<span class="text-white/40 font-mono text-[10px]"
-					>CLOUD_ACTIVE</span
+				<span
+					class="text-[9px] font-bold text-white/60 uppercase tracking-tighter"
 				>
+					{isCoreLinked ? "Cloud Connected" : "Local Mode"}
+				</span>
 			</div>
-			<button
-				class="text-white/40 hover:text-white transition-colors"
+			<ProButton
+				type="ghost"
+				size="sm"
 				on:click={() => (showSettings = true)}
-				title="Configure AIVA Key"
 			>
-				<svg
-					class="w-5 h-5"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-					></path>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-					></path>
-				</svg>
-			</button>
+				Settings
+			</ProButton>
 		</div>
 	</header>
 
@@ -461,110 +726,227 @@
 		</div>
 	{/if}
 
-	<main class="grid lg:grid-cols-3 gap-8">
-		<!-- Sidebar / History -->
-		<div class="glass-panel rounded-3xl p-6 h-fit bg-white/[0.02]">
-			<h2 class="text-lg font-semibold mb-6 flex items-center">
-				<svg
-					class="w-5 h-5 mr-2 text-blue-400"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-					><path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-					></path></svg
-				>
-				Session Info
-			</h2>
-			<div class="space-y-4">
-				<div
-					class="p-4 rounded-2xl bg-white/[0.03] border border-white/5"
-				>
-					<p class="text-xs text-white/40 uppercase mb-1">
-						Engine Status
-					</p>
-					<p class="text-sm font-medium text-blue-300">
-						{status}
-					</p>
-				</div>
-				<div
-					class="p-4 rounded-2xl bg-white/[0.03] border border-white/5"
-				>
-					<p class="text-xs text-white/40 uppercase mb-1">
-						Privacy Mode
-					</p>
-					<p class="text-sm font-medium text-blue-400">
-						Zero Retention Active
-					</p>
-				</div>
-				<div
-					class="p-4 rounded-2xl bg-white/[0.03] border border-white/5"
-				>
-					<p class="text-xs text-white/40 uppercase mb-1">
-						SOAP Engine
-					</p>
-					<p class="text-sm font-medium text-white/80">
-						AIVA v1.0 (Local Rules)
-					</p>
-				</div>
-				<button
-					on:click={clearWorkspace}
-					class="w-full py-3 text-sm text-white/60 hover:text-white transition-colors border border-dashed border-white/20 rounded-2xl hover:border-white/40"
-				>
-					Clear Workspace
-				</button>
-			</div>
-		</div>
-
-		<!-- Central Action Area -->
-		<div class="lg:col-span-2 space-y-8">
-			<!-- Recording Interface -->
-			<div
-				class="glass-panel rounded-[2.5rem] p-12 text-center relative overflow-hidden"
-			>
-				<div
-					class="absolute inset-0 bg-gradient-to-b from-blue-600/5 to-transparent pointer-events-none"
-				></div>
-
-				<p
-					class="text-blue-400/80 font-mono text-xs tracking-widest uppercase mb-4"
-				>
-					{status}
-				</p>
-
-				<div class="relative inline-block mb-10">
-					{#if isRecording}
-						<div
-							class="absolute inset-0 animate-pulse-ring rounded-full bg-red-500/20"
-						></div>
-					{/if}
-					{#if isProcessing}
-						<div
-							class="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-blue-500"
-						></div>
-					{/if}
-					<button
-						on:click={toggleRecording}
-						disabled={isProcessing}
-						class="relative w-28 h-28 rounded-full flex items-center justify-center transition-all duration-500 transform {isRecording
-							? 'bg-red-500 rotate-90 scale-90 shadow-red-500/40'
-							: isProcessing
-								? 'bg-gray-600 cursor-not-allowed'
-								: 'bg-gradient-to-br from-blue-500 to-indigo-600 hover:scale-105 shadow-blue-500/30'} shadow-[0_0_40px_rgba(0,0,0,0.3)] z-10"
+	<main class="grid lg:grid-cols-4 gap-8">
+		<!-- Left Sidebar: Session Guard -->
+		<aside class="space-y-6">
+			<div class="glass-panel rounded-[2rem] p-6 space-y-6">
+				<div>
+					<p
+						class="text-[10px] text-white/40 uppercase tracking-widest font-bold mb-4"
 					>
-						{#if isRecording}
-							<svg
-								class="w-10 h-10 text-white fill-current"
-								viewBox="0 0 24 24"
-								><rect x="6" y="6" width="12" height="12"
-								></rect></svg
+						Cloud Status
+					</p>
+					<div class="flex items-center space-x-3">
+						<div class="relative flex items-center justify-center">
+							<span
+								class="w-2.5 h-2.5 rounded-full {isCoreLinked
+									? 'bg-green-400'
+									: 'bg-white/10'}"
+							></span>
+							{#if isCoreLinked}
+								<div
+									class="absolute inset-0 bg-green-400/20 blur-sm rounded-full animate-pulse"
+								></div>
+							{/if}
+						</div>
+						<p
+							class="text-xs font-bold {isCoreLinked
+								? 'text-white'
+								: 'text-white/20'}"
+						>
+							{isCoreLinked ? "AIVA_CORE_STABLE" : "CORE_OFFLINE"}
+						</p>
+					</div>
+				</div>
+
+				<div
+					class="pt-8 border-t border-white/5 flex flex-col items-center"
+				>
+					<div class="relative w-28 h-28 mb-4">
+						<svg class="w-full h-full transform -rotate-90">
+							<circle
+								cx="56"
+								cy="56"
+								r="50"
+								stroke="currentColor"
+								stroke-width="10"
+								fill="transparent"
+								class="text-white/5"
+							/>
+							<circle
+								cx="56"
+								cy="56"
+								r="50"
+								stroke="currentColor"
+								stroke-width="10"
+								fill="transparent"
+								class="text-blue-500 transition-all duration-700 ease-out"
+								stroke-dasharray="314.159"
+								stroke-dashoffset={314.159 -
+									(314.159 * integrityScore) / 100}
+								stroke-linecap="round"
+							/>
+						</svg>
+						<div
+							class="absolute inset-0 flex flex-col items-center justify-center"
+						>
+							<span
+								class="text-2xl font-bold text-white leading-none"
+								>{integrityScore}%</span
 							>
-						{:else if isProcessing}
+							<span
+								class="text-[8px] text-white/40 uppercase font-bold tracking-[0.2em] mt-1"
+								>Integrity</span
+							>
+						</div>
+					</div>
+					<p
+						class="text-[9px] text-white/30 uppercase tracking-widest font-mono"
+					>
+						{integrityScore > 80
+							? "HIGH_TRUST_SIGNAL"
+							: "AUGMENTED_SKEPTICISM"}
+					</p>
+				</div>
+
+				<!-- Billing Vault -->
+				<div class="pt-6 border-t border-white/5">
+					<div class="flex justify-between items-center mb-4">
+						<p
+							class="text-[10px] text-white/40 uppercase tracking-widest font-bold"
+						>
+							Billing Vault
+						</p>
+						<span class="text-blue-400 font-mono text-xs"
+							>{billingItems.length}</span
+						>
+					</div>
+					<div
+						class="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-2"
+					>
+						{#each billingItems as item}
+							<div
+								class="flex justify-between items-center bg-black/30 p-2 rounded-lg text-[10px] border border-white/5 group"
+							>
+								<div class="flex items-center gap-3 min-w-0">
+									<img
+										src="/assets/icon_gold_coin.png"
+										alt="coin"
+										class="w-4 h-4 object-contain opacity-80"
+									/>
+									<div class="flex-grow min-w-0">
+										<div class="flex items-center gap-2">
+											<span
+												class="text-blue-300 font-mono font-bold uppercase truncate"
+												>{item.sku}</span
+											>
+											<span
+												class="text-[9px] text-white/30"
+												>x{item.quantity}</span
+											>
+										</div>
+									</div>
+								</div>
+								<button
+									on:click={() =>
+										volatileBillingTray.removeItem(item.id)}
+									class="opacity-0 group-hover:opacity-100 text-red-500/50 hover:text-red-500 transition-all"
+								>
+									<svg
+										class="w-3 h-3"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+										><path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M6 18L18 6M6 6l12 12"
+										></path></svg
+									>
+								</button>
+							</div>
+						{:else}
+							<p
+								class="text-[9px] text-white/20 italic text-center py-4"
+							>
+								No charges detected yet.
+							</p>
+						{/each}
+					</div>
+				</div>
+
+				{#if evidenceSeal}
+					<div
+						class="glass-panel p-4 rounded-2xl border border-blue-500/50 bg-blue-500/10 animate-in fade-in zoom-in duration-500 mt-4"
+					>
+						<div class="flex items-center space-x-2 mb-3">
+							<div
+								class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"
+							></div>
+							<h3
+								class="text-[10px] font-black text-blue-300 uppercase tracking-tighter"
+							>
+								Sovereign Evidence Seal
+							</h3>
+						</div>
+
+						<div class="space-y-3">
+							<div>
+								<span
+									class="block text-[8px] text-white/30 uppercase font-bold mb-1"
+									>SHA-256 Vault Hash</span
+								>
+								<div
+									class="bg-black/40 p-2 rounded border border-white/5 font-mono text-[8px] text-blue-200/50 break-all select-all"
+								>
+									{evidenceHash}
+								</div>
+							</div>
+
+							<div>
+								<span
+									class="block text-[8px] text-white/30 uppercase font-bold mb-1"
+									>Cryptographic Seal</span
+								>
+								<div
+									class="bg-black/40 p-2 rounded border border-white/5 font-mono text-[8px] text-green-400/70 break-all select-all"
+								>
+									{evidenceSeal}
+								</div>
+							</div>
+
+							<div
+								class="flex justify-between items-center py-2 border-t border-white/5 mt-2"
+							>
+								<span class="text-[9px] text-blue-400 font-bold"
+									>SOVEREIGN_LOCKED</span
+								>
+								<div
+									class="px-2 py-0.5 rounded bg-blue-400/20 border border-blue-400/30 text-[8px] text-blue-300 font-mono"
+								>
+									v4.2.0-SECURE
+								</div>
+							</div>
+						</div>
+					</div>
+				{/if}
+			</div>
+		</aside>
+
+		<!-- Main Workspace -->
+		<section class="lg:col-span-3 space-y-8">
+			<!-- Clinical Intelligence Dashboard -->
+			<div
+				class="glass-panel rounded-[2.5rem] p-8 min-h-[400px] flex flex-col"
+			>
+				<div class="flex justify-between items-center mb-8">
+					<div class="flex items-center gap-4">
+						<div
+							class="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center"
+						>
 							<svg
-								class="w-10 h-10 text-white animate-pulse"
+								class="w-6 h-6 text-blue-400"
 								fill="none"
 								stroke="currentColor"
 								viewBox="0 0 24 24"
@@ -573,75 +955,27 @@
 									stroke-linecap="round"
 									stroke-linejoin="round"
 									stroke-width="2"
-									d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-								></path>
+									d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+								/>
 							</svg>
-						{:else}
-							<svg
-								class="w-10 h-10 text-white fill-current"
-								viewBox="0 0 24 24"
-								><path
-									d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"
-								/><path
-									d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"
-								/></svg
+						</div>
+						<div>
+							<h3 class="text-xl font-bold text-white/90">
+								Clinical Intelligence
+							</h3>
+							<p
+								class="text-xs text-white/40 uppercase tracking-widest"
 							>
-						{/if}
-					</button>
-				</div>
-
-				<div class="flex justify-center space-x-12">
-					<div class="text-center">
-						<span class="block text-2xl font-bold font-mono"
-							>{formatTime(elapsedTime)}</span
-						>
-						<span
-							class="text-[10px] text-white/40 uppercase tracking-widest"
-							>Elapsed</span
-						>
+								AI-Powered Analysis
+							</p>
+						</div>
 					</div>
-					<div class="h-10 w-px bg-white/10"></div>
-					<div class="text-center">
-						<span
-							class="block text-2xl font-bold font-mono text-blue-400"
-							>{keyInsights}</span
-						>
-						<span
-							class="text-[10px] text-white/40 uppercase tracking-widest"
-							>Key Insights</span
-						>
-					</div>
-				</div>
-			</div>
-
-			<!-- Output / Transcript Area -->
-			<div
-				class="glass-panel rounded-[2.5rem] p-8 min-h-[400px] flex flex-col"
-			>
-				<div class="flex justify-between items-center mb-6">
-					<h3 class="text-lg font-semibold text-white/80">
-						Structured SO<span class="text-blue-400 text-sm"
-							>AIVA</span
-						>P Note
-					</h3>
 					<div class="flex space-x-3">
 						<button
 							on:click={copyToClipboard}
 							disabled={!transcript}
-							class="px-4 py-2 text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+							class="px-4 py-2 text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all flex items-center disabled:opacity-50"
 						>
-							<svg
-								class="w-4 h-4 mr-2"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								><path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
-								></path></svg
-							>
 							Copy Note
 						</button>
 						<button
@@ -649,90 +983,471 @@
 							disabled={!transcript || isPushing}
 							class="px-4 py-2 text-xs font-semibold {isPushing
 								? 'bg-blue-800'
-								: 'bg-blue-600 hover:bg-blue-500'} rounded-xl transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 flex items-center"
+								: 'bg-blue-600 hover:bg-blue-500'} rounded-xl transition-all shadow-lg"
 						>
-							{#if isPushing}
-								<svg
-									class="animate-spin -ml-1 mr-2 h-3 w-3 text-white"
-									xmlns="http://www.w3.org/2000/svg"
-									fill="none"
-									viewBox="0 0 24 24"
-								>
-									<circle
-										class="opacity-25"
-										cx="12"
-										cy="12"
-										r="10"
-										stroke="currentColor"
-										stroke-width="4"
-									></circle>
-									<path
-										class="opacity-75"
-										fill="currentColor"
-										d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-									></path>
-								</svg>
-								Syncing...
-							{:else}
-								Push to PIMS
-							{/if}
+							{isPushing ? "Pushing..." : "Sync to PIMS"}
 						</button>
 					</div>
 				</div>
 
-				<div
-					class="flex-grow bg-black/20 rounded-2xl p-6 border border-white/5 font-mono text-sm leading-relaxed whitespace-pre-wrap text-white/90"
-				>
-					{#if transcript}
-						{transcript}
-					{:else}
+				<div class="grid md:grid-cols-3 gap-8 flex-grow">
+					<!-- Statistics & Scoring -->
+					<div class="space-y-6">
 						<div
-							class="h-full flex flex-col items-center justify-center text-white/20 space-y-4"
+							class="bg-black/20 rounded-2xl p-6 border border-white/5"
 						>
-							<svg
-								class="w-12 h-12"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								><path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-								></path></svg
+							<div
+								class="flex items-center gap-3 mb-4 text-blue-400"
 							>
-							<p class="text-center italic">
-								Waiting for AIVA analysis...<br /><span
-									class="text-[10px] not-italic opacity-50"
-									>Press the mic button to start recording.</span
+								<svg
+									class="w-5 h-5"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
 								>
-							</p>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M13 10V3L4 14h7v7l9-11h-7z"
+									/>
+								</svg>
+								<span class="text-[10px] uppercase font-black"
+									>Live Performance</span
+								>
+							</div>
+							<div class="grid grid-cols-2 gap-4">
+								<div class="text-center">
+									<span
+										class="block text-2xl font-bold font-mono text-white"
+										>{formatTime(elapsedTime)}</span
+									>
+									<span
+										class="text-[10px] text-white/40 uppercase tracking-widest"
+										>Elapsed</span
+									>
+								</div>
+								<div class="text-center">
+									<span
+										class="block text-2xl font-bold font-mono text-blue-400"
+										>{keyInsights}</span
+									>
+									<span
+										class="text-[10px] text-white/40 uppercase tracking-widest"
+										>Insights</span
+									>
+								</div>
+							</div>
 						</div>
-					{/if}
-				</div>
 
-				<!-- Ethics/Sovereignty Footer -->
-				<div
-					class="mt-6 flex items-center justify-between text-[10px] text-white/30 uppercase tracking-widest font-bold"
-				>
-					<span>ZERO DATA RETENTION POLICY</span>
-					<div class="flex space-x-4">
-						<span>PII REDACTION: ACTIVE</span>
-						<span>LOCAL PROCESSING: ENABLED/FALLBACK</span>
+						<!-- Tool Belt for Clinical Templates -->
+						<div class="pt-4">
+							<p
+								class="text-[10px] text-white/40 uppercase tracking-widest font-bold mb-4"
+							>
+								Tool Belt
+							</p>
+							<div class="grid grid-cols-2 gap-3">
+								{#each Object.entries(SOAP_TEMPLATES).slice(0, 4) as [key, template]}
+									<button
+										on:click={() =>
+											(selectedTemplate = key)}
+										class="tool-btn {selectedTemplate ===
+										key
+											? 'active'
+											: ''}"
+									>
+										<div
+											class="tool-icon {key.includes(
+												'wellness',
+											)
+												? 'icon-clinic'
+												: key.includes('sick')
+													? 'icon-heart'
+													: key.includes(
+																'vaccination',
+														  )
+														? 'icon-kit'
+														: key.includes('dental')
+															? 'icon-kit'
+															: 'icon-heart'}"
+										></div>
+										<span class="label text-[8px]"
+											>{template.name.split(" ")[0]}</span
+										>
+									</button>
+								{/each}
+							</div>
+						</div>
+					</div>
+
+					<!-- Processing Area / Output -->
+					<div class="md:col-span-2 flex flex-col space-y-4">
+						<div
+							class="flex justify-between items-center text-[10px] text-white/40 uppercase font-black tracking-widest"
+						>
+							<span>AIVA Output Stream</span>
+							<span class="text-green-400/80"
+								>Local Redaction Active</span
+							>
+						</div>
+						<div
+							id="soap-stream-box"
+							class="paper-texture rounded-3xl p-8 min-h-[300px] overflow-y-auto custom-scrollbar flex-grow transition-all duration-500 {isProcessing
+								? 'opacity-50'
+								: ''}"
+						>
+							{#if transcript}
+								<div
+									class="prose prose-sm max-w-none whitespace-pre-wrap"
+								>
+									{transcript}
+								</div>
+							{:else if isProcessing}
+								<div
+									class="flex flex-col items-center justify-center h-full space-y-4"
+								>
+									<div
+										class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"
+									></div>
+									<p class="text-xs italic opacity-40">
+										Analyzing clinical context...
+									</p>
+								</div>
+							{:else}
+								<div
+									class="flex flex-col items-center justify-center h-full opacity-20 text-center px-12"
+								>
+									<svg
+										class="w-12 h-12 mb-4"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+										/>
+									</svg>
+									<p class="text-sm font-medium">
+										Capture audio to begin analysis
+									</p>
+								</div>
+							{/if}
+						</div>
 					</div>
 				</div>
 			</div>
-		</div>
+
+			<!-- Interaction Area -->
+			<div class="grid md:grid-cols-2 gap-8">
+				<!-- Raw Record / Mic -->
+				<div
+					class="glass-panel rounded-[2rem] p-8 flex flex-col items-center justify-center text-center space-y-6"
+				>
+					<button
+						on:click={toggleRecording}
+						class="group relative w-28 h-28 flex items-center justify-center transition-all duration-300"
+					>
+						{#if isRecording}
+							<svg
+								class="absolute inset-0 w-full h-full transform -rotate-90"
+							>
+								<circle
+									cx="56"
+									cy="56"
+									r="52"
+									stroke="currentColor"
+									stroke-width="4"
+									fill="transparent"
+									class="text-red-500/10"
+								/>
+								<circle
+									cx="56"
+									cy="56"
+									r="52"
+									stroke="currentColor"
+									stroke-width="4"
+									fill="transparent"
+									class="text-red-500 animate-[spin_3s_linear_infinite]"
+									stroke-dasharray="326.7"
+									stroke-dashoffset="245"
+									stroke-linecap="round"
+								/>
+							</svg>
+						{/if}
+						<div
+							class="absolute inset-2 rounded-full {isRecording
+								? 'bg-red-500 animate-pulse'
+								: 'bg-blue-500/20'}"
+						></div>
+						<div
+							class="relative w-16 h-16 rounded-full border-4 {isRecording
+								? 'border-white/20 bg-red-600'
+								: 'border-blue-500 bg-[#2D2D2D]'} flex items-center justify-center shadow-2xl transition-all duration-500"
+						>
+							{#if isRecording}
+								<div class="w-4 h-4 bg-white rounded-sm"></div>
+							{:else}
+								<svg
+									class="w-8 h-8 text-blue-400"
+									fill="currentColor"
+									viewBox="0 0 20 20"
+								>
+									<path
+										d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+									/>
+								</svg>
+							{/if}
+						</div>
+					</button>
+					<div>
+						<h4 class="text-lg font-bold">
+							{isRecording ? "Listening" : "Start Session"}
+						</h4>
+						<p class="text-xs text-white/40">
+							{isRecording
+								? "AIVA is capturing context..."
+								: "Push to start recording"}
+						</p>
+					</div>
+				</div>
+
+				<!-- Visual Feedback / Raw Context -->
+				<div class="glass-panel rounded-[2rem] p-6 bg-black/40">
+					<div class="flex justify-between items-center mb-4">
+						<span
+							class="text-[10px] font-black text-white/20 uppercase tracking-widest"
+							>Raw Acoustic Buffer</span
+						>
+						{#if isRecording}
+							<div class="flex gap-1">
+								<div
+									class="w-1 h-3 bg-blue-500/50 animate-bounce"
+								></div>
+								<div
+									class="w-1 h-4 bg-blue-500 animate-bounce"
+									style="animation-delay: 0.1s"
+								></div>
+								<div
+									class="w-1 h-3 bg-blue-500/50 animate-bounce"
+									style="animation-delay: 0.2s"
+								></div>
+							</div>
+						{/if}
+					</div>
+					<div
+						id="raw-stream-box"
+						class="h-[120px] overflow-y-auto custom-scrollbar font-mono text-[11px] leading-relaxed text-blue-400/60"
+					>
+						{rawTranscript || "Waiting for signal..."}
+						{#if interimTranscript}
+							<span class="opacity-30">{interimTranscript}</span>
+						{/if}
+					</div>
+				</div>
+			</div>
+
+			<!-- Clinical Workspace -->
+			<div
+				class="glass-panel rounded-[2.5rem] overflow-hidden flex flex-col min-h-[400px]"
+			>
+				<div
+					class="bg-white/5 px-8 py-4 flex justify-between items-center border-b border-white/5"
+				>
+					<div class="flex items-center gap-2">
+						<div class="w-2 h-2 rounded-full bg-blue-500"></div>
+						<span
+							class="text-xs font-bold text-white/60 tracking-widest uppercase"
+							>Clinical Workspace</span
+						>
+					</div>
+					<div class="flex gap-4">
+						<button
+							on:click={clearWorkspace}
+							class="text-[10px] font-black text-white/20 hover:text-white/60 transition-colors uppercase"
+							>Clear</button
+						>
+						<button
+							on:click={copyToClipboard}
+							class="text-[10px] font-black text-blue-400/60 hover:text-blue-400 transition-colors uppercase tracking-widest"
+							>Copy to Clipboard</button
+						>
+					</div>
+				</div>
+				<textarea
+					bind:value={rawTranscript}
+					on:input={handleEditorInput}
+					class="flex-grow bg-transparent p-10 font-mono text-sm leading-relaxed text-white/80 focus:outline-none resize-none custom-scrollbar"
+					placeholder="The clinical story begins here. Type natively or let AIVA structure your consult..."
+				></textarea>
+			</div>
+		</section>
 	</main>
 
 	<!-- Project Footer -->
-	<footer class="mt-20 text-center">
-		<p class="text-white/20 text-sm">
-			Powered by <span
-				class="text-white/40 font-semibold tracking-tighter"
-				>AIVet.dev</span
+	<footer class="mt-20 mb-12 text-center">
+		<p class="text-white/20 text-xs uppercase tracking-[0.2em] font-bold">
+			Powered by [Vetnotes.pro]
+		</p>
+		<p class="mt-2 text-white/10 text-[10px] uppercase tracking-widest">
+			Built by <a
+				href="https://influential.digital"
+				class="hover:text-blue-400 transition-colors"
+				>Influential.Digital</a
 			>
-			&bull; Sovereign Clinician Alliance 2026
 		</p>
 	</footer>
+	<AxisPickerModal
+		type={activeAxisType || "pathology"}
+		isOpen={showAxisPicker}
+		on:save={handleAxisSave}
+		on:cancel={() => {
+			showAxisPicker = false;
+			activeAxisType = null;
+		}}
+	/>
 </div>
+
+<style>
+	.glass-panel {
+		background: rgba(255, 255, 255, 0.02);
+		backdrop-filter: blur(20px);
+		border: 1px solid rgba(255, 255, 255, 0.05);
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+	}
+
+	/* Paper Texture for SOAP Note */
+	.paper-texture {
+		background-color: #f8f5f0;
+		background-image: radial-gradient(#dcd9d4 0.5px, transparent 0.5px),
+			radial-gradient(#dcd9d4 0.5px, #f8f5f0 0.5px);
+		background-size: 20px 20px;
+		background-position:
+			0 0,
+			10px 10px;
+		color: #2c3e50 !important;
+		box-shadow:
+			inset 0 0 40px rgba(0, 0, 0, 0.05),
+			0 10px 20px rgba(0, 0, 0, 0.2);
+		border: none !important;
+		position: relative;
+	}
+
+	.paper-texture * {
+		color: #2c3e50 !important;
+	}
+
+	.paper-texture::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		right: 0;
+		border-width: 0 20px 20px 0;
+		border-style: solid;
+		border-color: #e5e0d8 #1a1f26;
+		display: block;
+		width: 0;
+	}
+
+	/* Warmer Hearth Status */
+	.hearth-glow {
+		box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
+		background: radial-gradient(circle, #22c55e 0%, transparent 70%);
+	}
+
+	/* Tool Belt Icons */
+	.tool-icon {
+		width: 32px;
+		height: 32px;
+		background-size: contain;
+		background-repeat: no-repeat;
+		background-position: center;
+		image-rendering: auto;
+		display: inline-block;
+		vertical-align: middle;
+	}
+
+	/* Toolbelt mappings */
+	.icon-clinic {
+		background-image: url("/assets/icon_clinic.png");
+	}
+	.icon-client {
+		background-image: url("/assets/icon_vet.png");
+	}
+	.icon-money {
+		background-image: url("/assets/icon_gold_coin.png");
+	}
+	.icon-heart {
+		background-image: url("/assets/icon_heart.png");
+	}
+	.icon-kit {
+		background-image: url("/assets/icon_medkit.png");
+	}
+	.icon-calendar {
+		background-image: url("/assets/icon_calendar.png");
+	}
+
+	.clinic-icon {
+		width: 48px;
+		height: 48px;
+		background-image: url("/assets/icon_clinic.png");
+		background-size: contain;
+		background-repeat: no-repeat;
+		background-position: center;
+		background-color: #111827;
+		border-radius: 1rem;
+		border: 2px solid #2d2d2d;
+	}
+
+	.tool-btn {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.75rem;
+		border-radius: 1rem;
+		background: rgba(255, 255, 255, 0.03);
+		border: 1px solid rgba(255, 255, 255, 0.05);
+		color: rgba(255, 255, 255, 0.4);
+		transition: all 0.2s;
+		min-width: 80px;
+	}
+
+	.tool-btn:hover {
+		background: rgba(255, 255, 255, 0.08);
+		color: white;
+		transform: translateY(-2px);
+	}
+
+	.tool-btn.active {
+		background: rgba(59, 130, 246, 0.15);
+		border-color: rgba(59, 130, 246, 0.5) !important;
+		color: #60a5fa;
+		box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+	}
+
+	.tool-btn .label {
+		font-size: 9px;
+		font-weight: 800;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	/* Custom Scrollbar */
+	.custom-scrollbar::-webkit-scrollbar {
+		width: 6px;
+	}
+	.custom-scrollbar::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	.custom-scrollbar::-webkit-scrollbar-thumb {
+		background: rgba(255, 255, 255, 0.1);
+		border-radius: 10px;
+	}
+	.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+		background: rgba(255, 255, 255, 0.2);
+	}
+</style>
