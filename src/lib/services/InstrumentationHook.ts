@@ -18,6 +18,10 @@ function createInstrumentationStore() {
 
     return {
         subscribe,
+        startSimulation: () => {
+            // Default to Snakebite scenario if triggered from high-stakes modes
+            return createInstrumentationStore().startSnakebiteScenario();
+        },
 
         // Connect to the Sovereign Channel
         connect: () => {
@@ -41,27 +45,36 @@ function createInstrumentationStore() {
             set(null);
         },
 
-        // Simulate a live feed (for demo/testing)
-        startSimulation: () => {
+        // Simulate a Snakebite (Envenomation) scenario
+        startSnakebiteScenario: () => {
             if (simulationInterval) clearInterval(simulationInterval);
 
-            console.log('[InstrumentationHook] Starting Vitals Simulation');
+            console.log('[InstrumentationHook] Starting Snakebite (Envenomation) Scenario');
 
-            // Base values
+            // Baseline stable
             let hr = 80;
             let spo2 = 98;
             let rr = 20;
             let temp = 38.5;
+            let step = 0;
 
             simulationInterval = setInterval(() => {
-                // Random walk
-                hr += (Math.random() - 0.5) * 5;
-                spo2 += (Math.random() - 0.5) * 1;
-                rr += (Math.random() - 0.5) * 2;
+                step++;
 
-                // Clamp
-                if (spo2 > 100) spo2 = 100;
-                if (spo2 < 90) spo2 = 90;
+                // Clinical Progression: Tachycardia + Hypoxemia
+                if (step > 5) { // After 10 seconds, start distress
+                    hr += 2.5; // Rapidly rising HR
+                    spo2 -= 0.3; // Gradual drop in oxygen saturation
+                    rr += 1; // Tachypnea
+                } else {
+                    // Random fluctuation
+                    hr += (Math.random() - 0.5) * 2;
+                }
+
+                // Clamp for realism
+                if (hr > 180) hr = 180;
+                if (spo2 < 82) spo2 = 82;
+                if (rr > 60) rr = 60;
 
                 set({
                     heartRate: Math.round(hr),
@@ -69,9 +82,9 @@ function createInstrumentationStore() {
                     respRate: Math.round(rr),
                     temp: Number(temp.toFixed(1)),
                     timestamp: Date.now(),
-                    source: 'Simulated (Sovereign)'
+                    source: 'Evidence-Locked (Forensic)'
                 });
-            }, 2000); // Update every 2 seconds
+            }, 2000);
         },
 
         stopSimulation: () => {

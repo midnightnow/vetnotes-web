@@ -8,6 +8,9 @@ import { writable, get } from 'svelte/store';
  * Persistence is limited to SessionStorage to allow for tab refresh protection.
  */
 
+/** Sync channel for cross-tab communication */
+export const CORE_SYNC_CHANNEL = "vetnotes-core-sync";
+
 export interface BillingItem {
     sku: string;
     description: string;

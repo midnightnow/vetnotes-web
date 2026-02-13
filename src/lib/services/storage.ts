@@ -1,7 +1,10 @@
 /**
  * Session Storage for VetNotes
- * Maintains a local history of consults in IndexedDB for audit trail.
+ * Maintains a local history of consults in IndexedDB with AES-256-GCM encryption.
  */
+
+import { ClinicalEncryptionService } from '../security/ClinicalEncryptionService';
+import { KeyEscrowService, DEFAULT_CLINIC_ID } from '../security/KeyEscrowService';
 
 const DB_NAME = 'vetnotes_sessions';
 const STORE_NAME = 'sessions';
@@ -37,16 +40,23 @@ function openDB(): Promise<IDBDatabase> {
 export async function saveSession(session: Omit<Session, 'id' | 'timestamp'>): Promise<string> {
     const db = await openDB();
     const id = crypto.randomUUID();
+    const timestamp = Date.now();
+
     const fullSession: Session = {
         ...session,
         id,
-        timestamp: Date.now(),
+        timestamp,
     };
+
+    // Encrypt the session data before storage using persistent vault key
+    const encryptedData = await ClinicalEncryptionService.encryptWithVault(fullSession, DEFAULT_CLINIC_ID);
 
     return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-        const request = store.add(fullSession);
+        // We store the encrypted envelope in a slightly different structure if needed,
+        // but for demo we'll keep the ID accessible for indexing.
+        const request = store.add({ ...encryptedData, id, timestamp });
         request.onsuccess = () => resolve(id);
         request.onerror = () => reject(request.error);
     });
@@ -61,10 +71,18 @@ export async function getSessions(limit: number = 50): Promise<Session[]> {
         const request = index.openCursor(null, 'prev');
 
         const results: Session[] = [];
-        request.onsuccess = () => {
+        request.onsuccess = async () => {
             const cursor = request.result;
             if (cursor && results.length < limit) {
-                results.push(cursor.value);
+                try {
+                    // Decrypt each session using persistent vault key
+                    const decrypted = await ClinicalEncryptionService.decryptWithVault(cursor.value, DEFAULT_CLINIC_ID);
+                    results.push(decrypted);
+                } catch (e) {
+                    console.error("Failed to decrypt session record:", e);
+                    // Fallback to raw data if not encrypted (backwards compatibility)
+                    results.push(cursor.value);
+                }
                 cursor.continue();
             } else {
                 resolve(results);

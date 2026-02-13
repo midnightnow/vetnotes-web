@@ -15,6 +15,10 @@
 	import AxisPickerModal from "$lib/components/AxisPickerModal.svelte";
 	import { ClinicalEncryptionService } from "$lib/security/ClinicalEncryptionService";
 	import {
+		KeyEscrowService,
+		DEFAULT_CLINIC_ID,
+	} from "$lib/security/KeyEscrowService";
+	import {
 		CORE_SYNC_CHANNEL,
 		volatileBillingTray,
 	} from "$lib/stores/VolatileStore";
@@ -27,6 +31,7 @@
 		TrustedSignature,
 		type ClinicalPayload,
 	} from "$lib/services/TrustedSignature";
+	import ReferenceSidebar from "$lib/components/ReferenceSidebar.svelte";
 
 	let evidenceSeal = "";
 	let evidenceHash = "";
@@ -41,8 +46,6 @@
 		payload: any;
 		timestamp: number;
 	}
-
-	const CORE_SYNC_CHANNEL = "vetnotes-core-sync";
 
 	let isRecording = false;
 	let isProcessing = false;
@@ -375,11 +378,12 @@
 
 			// SECURE AT REST: Encrypt the raw transcript using Noctua Sentinel signatures
 			status = "Encrypting Clinical Data (Sentinel)...";
-			const masterSecret = `CLINIC_${isPro ? "PRO" : "DEMO"}_${Date.now()}`; // Placeholder for clinic ID
-			const encryptedTranscript = await ClinicalEncryptionService.encrypt(
-				rawTranscript,
-				masterSecret,
-			);
+			const clinicId = isPro ? "CLINIC_PRO_DEFAULT" : DEFAULT_CLINIC_ID;
+			const encryptedTranscript =
+				await ClinicalEncryptionService.encryptWithVault(
+					rawTranscript,
+					clinicId,
+				);
 			console.log(
 				"🔒 Clinical Data Sealed:",
 				encryptedTranscript.signature,
@@ -1277,12 +1281,22 @@
 						>
 					</div>
 				</div>
-				<textarea
-					bind:value={rawTranscript}
-					on:input={handleEditorInput}
-					class="flex-grow bg-transparent p-10 font-mono text-sm leading-relaxed text-white/80 focus:outline-none resize-none custom-scrollbar"
-					placeholder="The clinical story begins here. Type natively or let AIVA structure your consult..."
-				></textarea>
+				<div class="flex flex-row h-full">
+					<textarea
+						bind:value={rawTranscript}
+						on:input={handleEditorInput}
+						class="flex-grow bg-transparent p-10 font-mono text-sm leading-relaxed text-white/80 focus:outline-none resize-none custom-scrollbar"
+						placeholder="The clinical story begins here. Type natively or let AIVA structure your consult..."
+					></textarea>
+					<!-- Smart Reference Sidebar (Integrated) -->
+					<div
+						class="w-64 border-l border-white/5 p-4 bg-black/20 hidden lg:block"
+					>
+						<ReferenceSidebar
+							transcript={transcript || rawTranscript}
+						/>
+					</div>
+				</div>
 			</div>
 		</section>
 	</main>

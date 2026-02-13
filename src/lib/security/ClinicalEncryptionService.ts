@@ -6,6 +6,8 @@
  */
 
 import { StateSigner } from './StateSigner';
+import { TrustedSignature } from '../services/TrustedSignature';
+import { KeyEscrowService, DEFAULT_CLINIC_ID } from './KeyEscrowService';
 
 const ALGORITHM = 'AES-256-GCM';
 const KEY_DERIVATION_ALGO = 'PBKDF2';
@@ -64,11 +66,22 @@ export class ClinicalEncryptionService {
             ciphertext: btoa(String.fromCharCode(...new Uint8Array(ciphertext))),
             iv: btoa(String.fromCharCode(...new Uint8Array(iv))),
             salt: btoa(String.fromCharCode(...new Uint8Array(salt))),
-            _v: 'v1_gcm'
+            _v: 'v2_forensic'
         };
 
-        // Anchor the encrypted envelope to the Verified Ledger
-        return await StateSigner.seal(envelope);
+        // Seal with StateSigner for integrity
+        const sealed = await StateSigner.seal(envelope);
+
+        // Generate Forensic Evidence Hash (External Anchor)
+        const forensicHash = TrustedSignature.signPayload({
+            caseId: "ENCRYPTED_BLOB",
+            transcript: envelope.ciphertext,
+            axes: {},
+            revenue: 0,
+            timestamp: Date.now()
+        });
+
+        return { ...sealed, forensicHash };
     }
 
     /**
@@ -99,5 +112,23 @@ export class ClinicalEncryptionService {
         } catch {
             return decoded; // Return as string if not JSON
         }
+    }
+
+    /**
+     * Encrypt using auto-retrieved master secret from KeyEscrowService.
+     * This is the preferred method for production use.
+     */
+    static async encryptWithVault(data: any, clinicId: string = DEFAULT_CLINIC_ID): Promise<any> {
+        const masterSecret = await KeyEscrowService.getOrCreateMasterSecret(clinicId);
+        return this.encrypt(data, masterSecret);
+    }
+
+    /**
+     * Decrypt using auto-retrieved master secret from KeyEscrowService.
+     * This is the preferred method for production use.
+     */
+    static async decryptWithVault(sealedEnvelope: any, clinicId: string = DEFAULT_CLINIC_ID): Promise<any> {
+        const masterSecret = await KeyEscrowService.getOrCreateMasterSecret(clinicId);
+        return this.decrypt(sealedEnvelope, masterSecret);
     }
 }

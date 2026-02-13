@@ -16,6 +16,19 @@
           "vetsorcery"
         ]
       }
+    },
+    "vetnotes-pro": {
+      "hosting": {
+        "dev": [
+          "vetnotes-pro"
+        ],
+        "staging": [
+          "vetnotes-pro"
+        ],
+        "production": [
+          "vetnotes-pro"
+        ]
+      }
     }
   },
   "etags": {}

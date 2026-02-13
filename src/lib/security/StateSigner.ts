@@ -1,9 +1,4 @@
-/**
- * StateSigner.ts
- * 
- * Implements the "Sovereign Audit" cryptographic anchoring for client-side state.
- * Prevents casual tampering (Save-Scumming) of exam scores and logic.
- */
+import { sha256 } from 'js-sha3';
 
 const LOCAL_SECRET = "VET_SORCERY_LOCAL_LEDGER_KEY_V1";
 
@@ -12,12 +7,13 @@ export class StateSigner {
      * Generates a simple HMAC-like signature for the state object.
      * Uses the Web Crypto API for performance and standard alignment.
      */
-    static async sign(data: any): Promise<string> {
-        const msgBuffer = new TextEncoder().encode(JSON.stringify(data) + LOCAL_SECRET);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        return hashHex;
+    static async sign(data: any, origin: string = "LOCAL_STATE"): Promise<string> {
+        const payload = {
+            data,
+            origin,
+            secret: LOCAL_SECRET
+        };
+        return sha256(JSON.stringify(payload));
     }
 
     /**
